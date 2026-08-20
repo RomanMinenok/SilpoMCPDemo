@@ -135,9 +135,16 @@ function renderDashboard(scrollToTop = true) {
       </div>
     </section>
     <section class="ranking-section" aria-labelledby="ranking-title">
-      ${topProducts.length ? renderTopProductsCommentary(topProducts) : ""}
-      <div class="section-heading"><div><p class="eyebrow">Часті гості</p><h2 id="ranking-title">Топ-10 товарів</h2></div><p>Сортуємо за кількістю різних чеків. Якщо порівну — за придбаною кількістю.</p></div>
-      <div class="period-filter" aria-label="Період для рейтингу товарів">${filterButtons}</div>
+      <div class="ranking-overview">
+        <div class="ranking-left-panel">
+          <div class="section-heading"><div><p class="eyebrow">Часті гості</p><h2 id="ranking-title">Топ-10 товарів</h2></div></div>
+          <div class="ranking-filter-panel">
+            <p class="ranking-explanation">Сортуємо за кількістю різних чеків. Якщо порівну — за придбаною кількістю.</p>
+            <div class="period-filter" aria-label="Період для рейтингу товарів">${filterButtons}</div>
+          </div>
+        </div>
+        ${topProducts.length ? renderTopProductsCommentary(topProducts) : ""}
+      </div>
       ${topProducts.length ? `<div class="rank-list">${productRows}</div>` : `<p class="ranking-empty" role="status">За вибраний період (${periodLabel}) покупок не знайдено.</p>`}
     </section>
     <section class="latest-section" aria-labelledby="latest-title">
@@ -285,19 +292,28 @@ function renderTopProductsCommentary(currentTopProducts) {
       : commentaryState === "error"
         ? "Спробувати ще раз"
         : "Почути критика";
+  const commentarySize = commentaryTextSize(content);
 
   return `
     <aside class="top-products-commentary${commentaryState === "ready" ? " is-ready" : ""}" aria-labelledby="commentary-title">
       <div class="commentary-bubble">
         <p class="eyebrow">Кишеньковий критик</p>
-        <h3 id="commentary-title">${content}</h3>
+        <h3 id="commentary-title" style="--commentary-size:${commentarySize}">${content}</h3>
         <div class="commentary-actions">
           <button class="commentary-button" type="button" data-top-products-commentary${commentaryState === "loading" ? " disabled" : ""}>${buttonLabel}</button>
-          <small>Надішлемо в OpenRouter лише назви й частоту ${currentTopProducts.length} товарів.</small>
+          <small>Лише назви й частота ${currentTopProducts.length} товарів → OpenRouter</small>
         </div>
       </div>
     </aside>
   `;
+}
+
+function commentaryTextSize(value) {
+  const length = String(value).length;
+  if (length > 220) return "1.02rem";
+  if (length > 160) return "1.18rem";
+  if (length > 100) return "1.42rem";
+  return "1.72rem";
 }
 
 async function requestTopProductsCommentary() {
