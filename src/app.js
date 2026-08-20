@@ -1,4 +1,4 @@
-import { aggregateProducts, formatQuantity, summarizeOrders } from "./lib/analytics.js";
+import { aggregateProducts, filterOrdersByDays, filterOrdersByMonths, formatQuantity, summarizeOrders } from "./lib/analytics.js";
 
 const app = document.querySelector("#app");
 const money = new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -6,7 +6,16 @@ const date = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "long", y
 let snapshot = null;
 let products = [];
 let topProducts = [];
-let summary = null;
+let selectedPeriodKey = "12m";
+
+const productPeriods = [
+  { key: "7d", days: 7, label: "7 днів" },
+  { key: "1m", months: 1, label: "1 міс." },
+  { key: "2m", months: 2, label: "2 міс." },
+  { key: "3m", months: 3, label: "3 міс." },
+  { key: "6m", months: 6, label: "6 міс." },
+  { key: "12m", months: 12, label: "1 рік" }
+];
 
 const icons = {
   arrow: `<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
@@ -19,7 +28,7 @@ function formatMoney(value) {
   return `${money.format(value)} ₴`;
 }
 
-function renderShell(content, detail = false) {
+function renderShell(content, detail = false, scrollToTop = true) {
   app.innerHTML = `
     <header class="site-header">
       <a class="wordmark" href="#/" aria-label="На головну">
@@ -37,7 +46,7 @@ function renderShell(content, detail = false) {
     </footer>
   `;
   document.querySelector("[data-logout]")?.addEventListener("click", logout);
-  window.scrollTo({ top: 0, behavior: "instant" });
+  if (scrollToTop) window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 function renderLoading() {
@@ -78,8 +87,15 @@ function renderLogin(message = "") {
   document.querySelector("[data-login]")?.addEventListener("click", login);
 }
 
-function renderDashboard() {
+function renderDashboard(scrollToTop = true) {
   if (!snapshot.orders.length) return renderEmpty();
+  const selectedPeriod = productPeriods.find((period) => period.key === selectedPeriodKey) || productPeriods.at(-1);
+  const filteredOrders = selectedPeriod.days
+    ? filterOrdersByDays(snapshot.orders, selectedPeriod.days, snapshot.periodEnd)
+    : filterOrdersByMonths(snapshot.orders, selectedPeriod.months, snapshot.periodEnd);
+  const selectedSummary = summarizeOrders(filteredOrders);
+  products = aggregateProducts(filteredOrders);
+  topProducts = products.slice(0, 10);
   const maxPurchases = topProducts[0]?.purchaseCount || 1;
   const productRows = topProducts.map((product, index) => `
     <a class="rank-row reveal" style="--delay:${index * 45}ms" href="#/product/${encodeURIComponent(product.id)}">
@@ -91,6 +107,10 @@ function renderDashboard() {
       <span class="arrow-button">${icons.arrow}</span>
     </a>
   `).join("");
+  const periodLabel = selectedPeriod.label;
+  const filterButtons = productPeriods.map((period) => `
+    <button class="period-filter-button${period.key === selectedPeriodKey ? " is-selected" : ""}" type="button" data-period-key="${period.key}" aria-pressed="${period.key === selectedPeriodKey}">${period.label}</button>
+  `).join("");
 
   renderShell(`
     ${snapshot.warnings?.length ? `<div class="warning-bar">${snapshot.warnings.map(escapeHtml).join(" ")}</div>` : ""}
@@ -98,21 +118,22 @@ function renderDashboard() {
       <div class="hero-copy reveal">
         <p class="eyebrow">Ваш продуктовий рік · ${shortDate(snapshot.periodStart)}—${shortDate(snapshot.periodEnd)}</p>
         <h1>Що у вас<br><span>завжди в кошику?</span></h1>
-        <p class="hero-note">Рейтинг повторів у чеках за 12 місяців. Без пакетів і випадкової математики між кілограмами та штуками.</p>
+        <p class="hero-note">Оберіть період для рейтингу товарів. Пакети й випадкова математика між кілограмами та штуками не враховуються.</p>
       </div>
       <div class="receipt-card reveal" style="--delay:100ms">
-        <div class="receipt-top"><span>${icons.spark} РІЧНИЙ ЗРІЗ</span><b>${summary.orders} чеків</b></div>
-        <div class="receipt-total"><small>Усього покупок на</small><strong>${formatMoney(summary.spent)}</strong></div>
+        <div class="receipt-top"><span>${icons.spark} ЗРІЗ ЗА ${periodLabel.toUpperCase()}</span><b>${selectedSummary.orders} чеків</b></div>
+        <div class="receipt-total"><small>Усього покупок на</small><strong>${formatMoney(selectedSummary.spent)}</strong></div>
         <div class="receipt-stats">
-          <div><small>Зекономлено</small><b>${formatMoney(summary.saved)}</b></div>
-          <div><small>Балабонуси</small><b>+${money.format(summary.bonuses)}</b></div>
+          <div><small>Зекономлено</small><b>${formatMoney(selectedSummary.saved)}</b></div>
+          <div><small>Балабонуси</small><b>+${money.format(selectedSummary.bonuses)}</b></div>
         </div>
         <div class="barcode" aria-hidden="true"></div><p>Пораховано локально для цієї сесії.</p>
       </div>
     </section>
     <section class="ranking-section" aria-labelledby="ranking-title">
       <div class="section-heading"><div><p class="eyebrow">Часті гості</p><h2 id="ranking-title">Топ-10 товарів</h2></div><p>Сортуємо за кількістю різних чеків. Якщо порівну — за придбаною кількістю.</p></div>
-      <div class="rank-list">${productRows}</div>
+      <div class="period-filter" aria-label="Період для рейтингу товарів">${filterButtons}</div>
+      ${topProducts.length ? `<div class="rank-list">${productRows}</div>` : `<p class="ranking-empty" role="status">За вибраний період (${periodLabel}) покупок не знайдено.</p>`}
     </section>
     <section class="latest-section" aria-labelledby="latest-title">
       <div class="section-heading compact"><div><p class="eyebrow">Найсвіжіше</p><h2 id="latest-title">Останні чеки</h2></div></div>
@@ -126,7 +147,13 @@ function renderDashboard() {
           </article>`).join("")}
       </div>
     </section>
-  `);
+  `, false, scrollToTop);
+  document.querySelectorAll("[data-period-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedPeriodKey = button.dataset.periodKey;
+      renderDashboard(false);
+    });
+  });
 }
 
 function renderProduct(id) {
@@ -201,6 +228,7 @@ async function logout() {
   snapshot = null;
   products = [];
   topProducts = [];
+  selectedPeriodKey = "12m";
   renderLogin();
 }
 
@@ -212,9 +240,6 @@ async function loadData() {
     if (response.status === 401) return renderLogin();
     if (!response.ok) throw new Error(result.message || "Не вдалося завантажити покупки.");
     snapshot = result;
-    products = aggregateProducts(snapshot.orders);
-    topProducts = products.slice(0, 10);
-    summary = summarizeOrders(snapshot.orders);
     route();
   } catch (error) {
     renderLogin(error.message);

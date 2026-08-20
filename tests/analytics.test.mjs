@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateProducts, summarizeOrders } from "../src/lib/analytics.js";
+import { aggregateProducts, filterOrdersByDays, filterOrdersByMonths, summarizeOrders } from "../src/lib/analytics.js";
 
 const orders = [
   { id: "a", createdAt: "2026-01-02", store: "A", total: 100, discount: 10, bonuses: 1, receiptUrl: "#", products: [
@@ -32,4 +32,24 @@ test("excludes bags from product analytics", () => {
 
 test("summarizes order money and visible line items", () => {
   assert.deepEqual(summarizeOrders(orders), { orders: 2, spent: 180, saved: 15, bonuses: 3, items: 3 });
+});
+
+test("keeps only orders in the selected rolling month period", () => {
+  const filteredOrders = filterOrdersByMonths([
+    { id: "recent", createdAt: "2026-07-21T12:00:00Z" },
+    { id: "boundary", createdAt: "2026-07-20T12:00:00Z" },
+    { id: "older", createdAt: "2026-07-20T11:59:59Z" }
+  ], 1, "2026-08-20T12:00:00Z");
+
+  assert.deepEqual(filteredOrders.map((order) => order.id), ["recent", "boundary"]);
+});
+
+test("keeps only orders in the selected seven-day period", () => {
+  const filteredOrders = filterOrdersByDays([
+    { id: "recent", createdAt: "2026-08-14T12:00:00Z" },
+    { id: "boundary", createdAt: "2026-08-13T12:00:00Z" },
+    { id: "older", createdAt: "2026-08-13T11:59:59Z" }
+  ], 7, "2026-08-20T12:00:00Z");
+
+  assert.deepEqual(filteredOrders.map((order) => order.id), ["recent", "boundary"]);
 });

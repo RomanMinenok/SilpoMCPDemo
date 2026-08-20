@@ -53,6 +53,29 @@ export function summarizeOrders(orders) {
   }, { orders: 0, spent: 0, saved: 0, bonuses: 0, items: 0 });
 }
 
+export function filterOrdersByMonths(orders, months, periodEnd = new Date()) {
+  const end = new Date(periodEnd);
+  const start = new Date(end);
+  start.setUTCMonth(start.getUTCMonth() - months);
+
+  return filterOrdersFromStart(orders, start, end);
+}
+
+export function filterOrdersByDays(orders, days, periodEnd = new Date()) {
+  const end = new Date(periodEnd);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - days);
+
+  return filterOrdersFromStart(orders, start, end);
+}
+
+function filterOrdersFromStart(orders, start, end) {
+  return orders.filter((order) => {
+    const createdAt = new Date(order.createdAt);
+    return !Number.isNaN(createdAt.valueOf()) && createdAt >= start && createdAt <= end;
+  });
+}
+
 export function formatQuantity(product) {
   if (product.weighted) return `${product.quantityTotal.toLocaleString("uk-UA", { maximumFractionDigits: 2 })} кг`;
   return `${product.quantityTotal.toLocaleString("uk-UA", { maximumFractionDigits: 0 })} од.`;

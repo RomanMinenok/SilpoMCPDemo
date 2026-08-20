@@ -1,8 +1,9 @@
 # Silpo / Pulse
 
 A browser prototype for personal purchase analytics powered by Silpo MCP. The
-application shows a user's top 10 products from the previous 12 months and a
-detailed purchase history for each product.
+application shows a user's top 10 products for a selected period (seven days,
+one, two, three, or six months, or one year) and a detailed purchase history
+for each product.
 
 The repository **does not contain receipts, purchases, tokens, or account
 data**. Each user signs in to their own Silpo account through OAuth, and the

@@ -76,6 +76,13 @@ main { width: min(1420px, calc(100% - 72px)); margin: 0 auto; }
 .section-heading > p { max-width: 420px; margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.5; }
 .section-heading .eyebrow { margin-bottom: 12px; color: var(--orange); }
 
+.period-filter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin: -22px 0 30px; }
+.period-filter-button { min-width: 76px; padding: 11px 16px; border: 1px solid var(--ink); border-radius: 999px; background: transparent; color: var(--ink); font: 700 .82rem/1 var(--mono); cursor: pointer; transition: background .2s, color .2s, transform .2s; }
+.period-filter-button:hover { background: var(--lime); }
+.period-filter-button:focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+.period-filter-button.is-selected { background: var(--ink); color: var(--white); }
+.period-filter-button.is-selected:hover { background: var(--orange); }
+.ranking-empty { margin: 0; padding: 38px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); color: var(--muted); line-height: 1.5; }
 .rank-list { border-top: 1px solid var(--ink); }
 .rank-row { display: grid; grid-template-columns: 70px 82px minmax(250px, 1.5fr) minmax(100px, .65fr) 150px 46px; gap: 22px; min-height: 112px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); text-decoration: none; transition: color .2s, background .2s, padding .2s; }
 .rank-row:hover { padding-inline: 14px; background: var(--white); }
