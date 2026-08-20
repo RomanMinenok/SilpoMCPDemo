@@ -16,9 +16,10 @@ let recentPurchasesHasMore = false;
 let recentPurchasesWarnings = [];
 let recentPurchasesState = "idle";
 let recentPurchasesError = "";
-let recentPurchasesCommentary = "";
-let recentPurchasesCommentaryState = "idle";
-let recentPurchasesCommentaryKey = "";
+let currentReceipt = null;
+let receiptCommentary = "";
+let receiptCommentaryState = "idle";
+let receiptCommentaryKey = "";
 
 const productPeriods = [
   { key: "7d", days: 7, label: "7 днів" },
@@ -177,9 +178,7 @@ function renderDashboard(scrollToTop = true) {
 
 function renderRecentPurchases(scrollToTop = true) {
   const currentPage = recentPurchasesOffset / 10 + 1;
-  const canShowCommentary = recentPurchasesState === "ready" && recentPurchases.length;
   const recentSummary = summarizeOrders(recentPurchases);
-  resetRecentPurchasesCommentaryFor(recentPurchases);
   const purchaseRows = recentPurchases.map((purchase, index) => {
     const itemCount = visibleItemCount(purchase);
     return `
@@ -210,16 +209,7 @@ function renderRecentPurchases(scrollToTop = true) {
         <div class="barcode" aria-hidden="true"></div><p>Показано по 10 чеків за раз.</p>
       </div>
     </section>
-    <section class="ranking-section recent-purchases-section" aria-labelledby="recent-purchases-title">
-      <div class="ranking-overview">
-        <div class="ranking-left-panel">
-          <div class="section-heading"><div><p class="eyebrow">Хронологія</p><h2 id="recent-purchases-title">Ваші чеки</h2></div></div>
-          <div class="ranking-filter-panel">
-            <p class="ranking-explanation">Показуємо по 10 чеків за раз. Кожна наступна сторінка завантажується окремо через Silpo MCP.</p>
-          </div>
-        </div>
-        ${canShowCommentary ? renderRecentPurchasesCommentary(recentPurchases) : ""}
-      </div>
+    <section class="ranking-section recent-purchases-section" aria-label="Останні чеки">
       ${recentPurchasesWarnings.length ? `<div class="warning-bar">${recentPurchasesWarnings.map(escapeHtml).join(" ")}</div>` : ""}
       ${recentPurchasesState === "loading" ? `<p class="ranking-empty" role="status">Завантажуємо чеки…</p>` : ""}
       ${recentPurchasesState === "error" ? `<div class="error-note" role="alert">${escapeHtml(recentPurchasesError)} <button class="text-button" type="button" data-retry-recent>Спробувати ще раз</button></div>` : ""}
@@ -241,13 +231,14 @@ function renderRecentPurchases(scrollToTop = true) {
       loadRecentPurchasesPage(offset);
     });
   });
-  document.querySelector("[data-recent-purchases-commentary]")?.addEventListener("click", requestRecentPurchasesCommentary);
   if (recentPurchasesState === "idle") void loadRecentPurchasesPage(0);
 }
 
-function renderReceipt(id) {
+function renderReceipt(id, scrollToTop = true) {
   const receipt = findReceipt(id);
   if (!receipt) return renderNotFound();
+  currentReceipt = receipt;
+  resetReceiptCommentaryFor(receipt);
   const items = receipt.products.filter((item) => !item.excluded);
   const itemCount = visibleItemCount(receipt);
   const itemsTotal = items.reduce((total, item) => total + item.quantity * item.price, 0);
@@ -265,12 +256,7 @@ function renderReceipt(id) {
           <div><dt>Знижка</dt><dd>${formatMoney(receipt.discount)}</dd></div>
         </dl>
       </div>
-      <aside class="receipt-detail-ticket reveal" style="--delay:80ms">
-        <span>${icons.cart}</span>
-        <small>Чек із історії</small>
-        <strong>${formatMoney(receipt.total)}</strong>
-        <p>${date.format(new Date(receipt.createdAt))}</p>
-      </aside>
+      ${renderReceiptCommentary()}
     </section>
     <section class="receipt-items-section" aria-labelledby="receipt-items-title">
       <div class="section-heading compact"><div><p class="eyebrow">Перелік у чеку</p><h2 id="receipt-items-title">Товари й ціни</h2></div><p>Ціни зафіксовані під час цієї покупки, а не є поточними цінами каталогу.</p></div>
@@ -285,7 +271,8 @@ function renderReceipt(id) {
       `).join("")}</div>
       <div class="receipt-items-total"><span>Товари у чеку</span><strong>${formatMoney(itemsTotal)}</strong></div>` : `<p class="ranking-empty" role="status">У цьому чеку немає товарів для відображення.</p>`}
     </section>
-  `, true);
+  `, true, scrollToTop);
+  document.querySelector("[data-receipt-commentary]")?.addEventListener("click", requestReceiptCommentary);
 }
 
 function renderProduct(id) {
@@ -370,9 +357,10 @@ async function logout() {
   recentPurchasesWarnings = [];
   recentPurchasesState = "idle";
   recentPurchasesError = "";
-  recentPurchasesCommentary = "";
-  recentPurchasesCommentaryState = "idle";
-  recentPurchasesCommentaryKey = "";
+  currentReceipt = null;
+  receiptCommentary = "";
+  receiptCommentaryState = "idle";
+  receiptCommentaryKey = "";
   renderLogin();
 }
 
@@ -512,33 +500,33 @@ async function loadRecentPurchasesPage(offset) {
   if (location.hash === "#/recent-purchases") renderRecentPurchases(false);
 }
 
-function resetRecentPurchasesCommentaryFor(purchases) {
-  const purchasesKey = purchases.map((purchase) => purchase.id).join("|");
-  if (purchasesKey === recentPurchasesCommentaryKey) return;
-  recentPurchasesCommentaryKey = purchasesKey;
-  recentPurchasesCommentary = "";
-  recentPurchasesCommentaryState = "idle";
+function resetReceiptCommentaryFor(receipt) {
+  if (receipt.id === receiptCommentaryKey) return;
+  receiptCommentaryKey = receipt.id;
+  receiptCommentary = "";
+  receiptCommentaryState = "idle";
 }
 
-function renderRecentPurchasesCommentary(purchases) {
+function renderReceiptCommentary() {
   return renderPocketCritic({
-    action: "recent-purchases-commentary",
-    commentary: recentPurchasesCommentary,
-    disclosure: `Лише назви й кількість товарів ${purchases.length} чеків → OpenRouter`,
-    emptyMessage: "Натисніть — і кишеньковий критик складе дотепну репліку про ваші останні покупки.",
-    state: recentPurchasesCommentaryState,
-    titleId: "recent-purchases-commentary-title"
+    action: "receipt-commentary",
+    commentary: receiptCommentary,
+    disclosure: "Лише назва й кількість товарів цього чеку → OpenRouter",
+    emptyMessage: "Натисніть — і кишеньковий критик складе дотепну репліку про цей чек.",
+    state: receiptCommentaryState,
+    titleId: "receipt-commentary-title"
   });
 }
 
-async function requestRecentPurchasesCommentary() {
-  const requestedKey = recentPurchasesCommentaryKey;
-  const purchasesForCommentary = recentPurchases.map((purchase) => ({
-    name: purchase.magicName,
-    itemCount: visibleItemCount(purchase)
-  }));
-  recentPurchasesCommentaryState = "loading";
-  renderRecentPurchases(false);
+async function requestReceiptCommentary() {
+  if (!currentReceipt) return;
+  const requestedKey = receiptCommentaryKey;
+  const purchasesForCommentary = [{
+    name: currentReceipt.magicName,
+    itemCount: visibleItemCount(currentReceipt)
+  }];
+  receiptCommentaryState = "loading";
+  renderReceipt(currentReceipt.id, false);
 
   try {
     const response = await fetch("/api/recent-purchases-commentary", {
@@ -550,14 +538,14 @@ async function requestRecentPurchasesCommentary() {
     if (!response.ok || typeof result.commentary !== "string") {
       throw new Error(result.message || "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.");
     }
-    recentPurchasesCommentary = result.commentary;
-    recentPurchasesCommentaryState = "ready";
+    receiptCommentary = result.commentary;
+    receiptCommentaryState = "ready";
   } catch (error) {
-    recentPurchasesCommentary = error instanceof Error ? error.message : "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.";
-    recentPurchasesCommentaryState = "error";
+    receiptCommentary = error instanceof Error ? error.message : "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.";
+    receiptCommentaryState = "error";
   }
 
-  if (requestedKey === recentPurchasesCommentaryKey && location.hash === "#/recent-purchases") renderRecentPurchases(false);
+  if (requestedKey === receiptCommentaryKey && currentReceipt) renderReceipt(currentReceipt.id, false);
 }
 
 function receiptWord(count) { return count === 1 ? "чеку" : "чеках"; }
