@@ -184,9 +184,12 @@ function renderRecentPurchases(scrollToTop = true) {
     return `
       <a class="receipt-row reveal" style="--delay:${index * 45}ms" href="#/receipt/${encodeURIComponent(purchase.id)}">
         <span class="receipt-row-number">${String(recentPurchasesOffset + index + 1).padStart(2, "0")}</span>
-        <span class="receipt-row-date">${shortDate(purchase.createdAt)}</span>
+        ${renderReceiptProductCollage(purchase)}
         <span class="receipt-row-copy"><strong>${escapeHtml(purchase.magicName)}</strong><small>${escapeHtml(purchase.prediction || purchase.store)}</small></span>
-        <span class="receipt-row-total"><strong>${formatMoney(purchase.total)}</strong><small>${itemCount} ${itemWord(itemCount)}</small></span>
+        <span class="receipt-row-meta">
+          ${renderReceiptPurchaseDate(purchase.createdAt)}
+          <span class="receipt-row-total"><strong>${formatMoney(purchase.total)}</strong><small>${itemCount} ${itemWord(itemCount)}</small></span>
+        </span>
         <span class="arrow-button">${icons.arrow}</span>
       </a>
     `;
@@ -555,6 +558,35 @@ function formatItemQuantity(item) { return `${item.quantity.toLocaleString("uk-U
 function findReceipt(id) { return [...recentPurchases, ...(snapshot?.orders || [])].find((receipt) => String(receipt.id) === String(id)); }
 function shortDate(value) { return new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(value)); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
+
+function renderReceiptProductCollage(order) {
+  const items = order.products.filter((item) => !item.excluded).slice(0, 3);
+  const itemNames = items.map((item) => item.name).filter(Boolean);
+  const label = itemNames.length ? `Товари в чеку: ${itemNames.join(", ")}` : "Товари в чеку";
+  const collageItems = items.map((item, index) => `
+    <span class="receipt-row-collage-item receipt-row-collage-item-${index + 1}">${renderProductImage(item.image, "", " loading=\"lazy\"", '<i aria-hidden="true">◌</i>')}</span>
+  `).join("");
+  const singleItemClass = items.length === 1 ? " is-single-item" : "";
+  return `<span class="receipt-row-collage${singleItemClass}" role="img" aria-label="${escapeHtml(label)}">${collageItems || '<i aria-hidden="true">◌</i>'}</span>`;
+}
+
+function renderReceiptPurchaseDate(value) {
+  const purchaseDate = new Date(value);
+  if (Number.isNaN(purchaseDate.getTime())) return '<span class="receipt-row-date"><span>—</span></span>';
+  const formattedDate = new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    timeZone: "Europe/Kyiv"
+  }).format(purchaseDate);
+  const formattedTime = new Intl.DateTimeFormat("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Europe/Kyiv"
+  }).format(purchaseDate);
+  return `<time class="receipt-row-date" datetime="${purchaseDate.toISOString()}"><span>${formattedDate}</span><small>${formattedTime}</small></time>`;
+}
 
 function renderProductImage(value, alt, extraAttributes = "", fallback = "<i>◌</i>") {
   const imageUrl = safeImageUrl(value);
