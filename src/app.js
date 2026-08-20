@@ -195,7 +195,7 @@ function renderRecentPurchases(scrollToTop = true) {
     `;
   }).join("");
 
-  renderShell(`
+  const content = `
     <section class="hero recent-hero">
       <div class="hero-copy reveal">
         <p class="eyebrow">Останні покупки</p>
@@ -226,7 +226,13 @@ function renderRecentPurchases(scrollToTop = true) {
         </nav>
       ` : ""}
     </section>
-  `, false, scrollToTop);
+  `;
+  const recentPurchasesPage = document.querySelector("[data-recent-purchases-page]");
+  if (recentPurchasesPage) {
+    recentPurchasesPage.innerHTML = content;
+  } else {
+    renderShell(`<div data-recent-purchases-page>${content}</div>`, false, scrollToTop);
+  }
   document.querySelector("[data-retry-recent]")?.addEventListener("click", () => loadRecentPurchasesPage(recentPurchasesOffset));
   document.querySelectorAll("[data-recent-page]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -234,7 +240,6 @@ function renderRecentPurchases(scrollToTop = true) {
       loadRecentPurchasesPage(offset);
     });
   });
-  if (recentPurchasesState === "idle") void loadRecentPurchasesPage(0);
 }
 
 function renderReceipt(id, scrollToTop = true) {
@@ -472,11 +477,11 @@ async function requestTopProductsCommentary() {
   if (requestedKey === commentaryProductsKey) renderDashboard(false);
 }
 
-async function loadRecentPurchasesPage(offset) {
+async function loadRecentPurchasesPage(offset, { scrollToTop = false } = {}) {
   recentPurchasesOffset = Math.max(0, offset);
   recentPurchasesState = "loading";
   recentPurchasesError = "";
-  renderRecentPurchases(false);
+  renderRecentPurchases(scrollToTop);
 
   try {
     const response = await fetch(`/api/recent-purchases?offset=${recentPurchasesOffset}`, { cache: "no-store" });
@@ -514,7 +519,7 @@ function renderReceiptCommentary() {
   return renderPocketCritic({
     action: "receipt-commentary",
     commentary: receiptCommentary,
-    disclosure: "Лише назва й кількість товарів цього чеку → OpenRouter",
+    disclosure: "Лише назви й кількість товарів цього чеку → OpenRouter",
     emptyMessage: "Натисніть — і кишеньковий критик складе дотепну репліку про цей чек.",
     state: receiptCommentaryState,
     titleId: "receipt-commentary-title"
@@ -524,18 +529,17 @@ function renderReceiptCommentary() {
 async function requestReceiptCommentary() {
   if (!currentReceipt) return;
   const requestedKey = receiptCommentaryKey;
-  const purchasesForCommentary = [{
-    name: currentReceipt.magicName,
-    itemCount: visibleItemCount(currentReceipt)
-  }];
+  const itemsForCommentary = currentReceipt.products
+    .filter((item) => !item.excluded)
+    .map(({ name, quantity }) => ({ name, quantity }));
   receiptCommentaryState = "loading";
   renderReceipt(currentReceipt.id, false);
 
   try {
-    const response = await fetch("/api/recent-purchases-commentary", {
+    const response = await fetch("/api/receipt-commentary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purchases: purchasesForCommentary })
+      body: JSON.stringify({ items: itemsForCommentary })
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || typeof result.commentary !== "string") {
@@ -610,7 +614,10 @@ function route() {
   const receiptMatch = location.hash.match(/^#\/receipt\/(.+)$/);
   if (match) renderProduct(decodeURIComponent(match[1]));
   else if (receiptMatch) renderReceipt(decodeURIComponent(receiptMatch[1]));
-  else if (location.hash === "#/recent-purchases") renderRecentPurchases();
+  else if (location.hash === "#/recent-purchases") {
+    if (recentPurchasesState === "idle") void loadRecentPurchasesPage(0, { scrollToTop: true });
+    else renderRecentPurchases();
+  }
   else if (!location.hash || location.hash === "#/" || location.hash === "#") renderDashboard();
   else renderNotFound();
 }

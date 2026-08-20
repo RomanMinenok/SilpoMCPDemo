@@ -19,9 +19,9 @@ import {
 } from "./lib/session-store.js";
 import {
   CommentaryError,
-  createRecentPurchasesCommentary,
+  createReceiptCommentary,
   createTopProductsCommentary,
-  sanitizeRecentPurchases,
+  sanitizeReceiptItems,
   sanitizeTopProducts
 } from "./lib/openrouter-commentary.js";
 
@@ -85,12 +85,12 @@ export async function handleRequest(request, response) {
       await saveSession(session);
       return json(response, 200, { commentary });
     }
-    if (requestUrl.pathname === "/api/recent-purchases-commentary" && request.method === "POST") {
+    if (requestUrl.pathname === "/api/receipt-commentary" && request.method === "POST") {
       if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const body = await readJson(request);
-      const purchases = sanitizeRecentPurchases(body?.purchases);
-      if (!purchases.length) return json(response, 400, { error: "INVALID_PURCHASES", message: "Немає чеків для коментаря." });
-      const commentary = await createRecentPurchasesCommentary(purchases, origin);
+      const items = sanitizeReceiptItems(body?.items);
+      if (!items.length) return json(response, 400, { error: "INVALID_ITEMS", message: "Немає товарів для коментаря." });
+      const commentary = await createReceiptCommentary(items, origin);
       await saveSession(session);
       return json(response, 200, { commentary });
     }

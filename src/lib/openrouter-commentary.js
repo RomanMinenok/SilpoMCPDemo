@@ -19,15 +19,18 @@ export function sanitizeTopProducts(value) {
     .slice(0, 10);
 }
 
-export function sanitizeRecentPurchases(value) {
+export function sanitizeReceiptItems(value) {
   if (!Array.isArray(value)) return [];
 
   return value
-    .map((purchase) => ({
-      name: String(purchase?.name || "").replace(/\s+/g, " ").trim().slice(0, 120),
-      itemCount: Math.max(0, Math.min(Math.round(Number(purchase?.itemCount) || 0), 1000))
-    }))
-    .filter((purchase) => purchase.name)
+    .map((item) => {
+      const quantity = Number(item?.quantity);
+      return {
+        name: String(item?.name || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        quantity: Number.isFinite(quantity) ? Math.max(0, Math.min(Math.round(quantity * 1000) / 1000, 1000)) : 0
+      };
+    })
+    .filter((item) => item.name)
     .slice(0, 10);
 }
 
@@ -37,19 +40,19 @@ export async function createTopProductsCommentary(value, origin) {
 
   return createCommentary({
     origin,
-    system: "Ти доброзичливий комікс-критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про цей топ товарів: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
+    system: "Ти доброзичливий критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про цей топ товарів: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
     prompt: `Топ товарів за кількістю чеків:\n${products.map((product, index) => `${index + 1}. ${product.name} — ${product.purchaseCount}`).join("\n")}`
   });
 }
 
-export async function createRecentPurchasesCommentary(value, origin) {
-  const purchases = sanitizeRecentPurchases(value);
-  if (!purchases.length) throw new CommentaryError("Немає чеків для коментаря.");
+export async function createReceiptCommentary(value, origin) {
+  const items = sanitizeReceiptItems(value);
+  if (!items.length) throw new CommentaryError("Немає товарів для коментаря.");
 
   return createCommentary({
     origin,
-    system: "Ти доброзичливий комікс-критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про останні чеки: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
-    prompt: `Останні чеки:\n${purchases.map((purchase, index) => `${index + 1}. ${purchase.name} — ${purchase.itemCount} товарів`).join("\n")}`
+    system: "Ти доброзичливий критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про цей чек: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренд поза списком. Якщо набір схожий на якесь блюдо можеш припустити що хотів приготувати власник чека, але це не обовʼязков. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
+    prompt: `Товари в чеку:\n${items.map((item, index) => `${index + 1}. ${item.name} — ${item.quantity}`).join("\n")}`
   });
 }
 
