@@ -178,6 +178,9 @@ a path or trailing slash.
   Redis for no longer than eight hours.
 - Purchase history is never cached in Redis and is fetched from Silpo MCP for
   each request.
+- The optional comic commentary sends only the current top-product names and
+  their receipt frequencies to OpenRouter after the user explicitly requests it.
+  It is never stored by this application.
 - The server does not write MCP responses to disk or include them in logs.
 - Signing out deletes the session; inactive sessions expire after eight hours.
 - Home addresses, electronic receipt URLs, and account data are never returned
@@ -194,6 +197,8 @@ a path or trailing slash.
 - `src/lib/normalize-orders.js` converts MCP responses into an allowlisted UI
   model.
 - `src/lib/analytics.js` performs pure top-product and summary aggregation.
+- `src/lib/openrouter-commentary.js` creates the optional, on-demand comic
+  commentary without exposing its API key to the browser.
 - `api/index.mjs` exposes the Node.js Vercel Function.
 - `vercel.json` defines the build, API rewrites, and function timeout.
 - `tests/` contains synthetic fixtures only; real purchases are prohibited.

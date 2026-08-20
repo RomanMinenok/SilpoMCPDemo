@@ -11,7 +11,8 @@ export async function handleWebRequest(request) {
   const nodeRequest = {
     method: request.method,
     url: `${pathname}${search ? `?${search}` : ""}`,
-    headers: Object.fromEntries(request.headers.entries())
+    headers: Object.fromEntries(request.headers.entries()),
+    body: request.method === "GET" || request.method === "HEAD" ? "" : await request.text()
   };
 
   return new Promise((resolve, reject) => {

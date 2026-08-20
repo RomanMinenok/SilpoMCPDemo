@@ -7,6 +7,9 @@ let snapshot = null;
 let products = [];
 let topProducts = [];
 let selectedPeriodKey = "12m";
+let topProductsCommentary = "";
+let commentaryState = "idle";
+let commentaryProductsKey = "";
 
 const productPeriods = [
   { key: "7d", days: 7, label: "7 днів" },
@@ -96,6 +99,7 @@ function renderDashboard(scrollToTop = true) {
   const selectedSummary = summarizeOrders(filteredOrders);
   products = aggregateProducts(filteredOrders);
   topProducts = products.slice(0, 10);
+  resetCommentaryFor(topProducts);
   const maxPurchases = topProducts[0]?.purchaseCount || 1;
   const productRows = topProducts.map((product, index) => `
     <a class="rank-row reveal" style="--delay:${index * 45}ms" href="#/product/${encodeURIComponent(product.id)}">
@@ -131,6 +135,7 @@ function renderDashboard(scrollToTop = true) {
       </div>
     </section>
     <section class="ranking-section" aria-labelledby="ranking-title">
+      ${topProducts.length ? renderTopProductsCommentary(topProducts) : ""}
       <div class="section-heading"><div><p class="eyebrow">Часті гості</p><h2 id="ranking-title">Топ-10 товарів</h2></div><p>Сортуємо за кількістю різних чеків. Якщо порівну — за придбаною кількістю.</p></div>
       <div class="period-filter" aria-label="Період для рейтингу товарів">${filterButtons}</div>
       ${topProducts.length ? `<div class="rank-list">${productRows}</div>` : `<p class="ranking-empty" role="status">За вибраний період (${periodLabel}) покупок не знайдено.</p>`}
@@ -154,6 +159,7 @@ function renderDashboard(scrollToTop = true) {
       renderDashboard(false);
     });
   });
+  document.querySelector("[data-top-products-commentary]")?.addEventListener("click", requestTopProductsCommentary);
 }
 
 function renderProduct(id) {
@@ -229,6 +235,9 @@ async function logout() {
   products = [];
   topProducts = [];
   selectedPeriodKey = "12m";
+  topProductsCommentary = "";
+  commentaryState = "idle";
+  commentaryProductsKey = "";
   renderLogin();
 }
 
@@ -251,6 +260,70 @@ function insightFor(product, rank) {
   if (product.weighted) return `Разом набралося ${formatQuantity(product)} — вагу рахуємо окремо від штучних товарів.`;
   if (product.quantityTotal > product.purchaseCount) return `Ви часто брали більше одного: ${formatQuantity(product)} у ${product.purchaseCount} чеках.`;
   return "Разова знахідка сезону — ще один штрих до вашого продуктового портрета.";
+}
+
+function resetCommentaryFor(currentTopProducts) {
+  const productKey = currentTopProducts.map((product) => `${product.id}:${product.purchaseCount}`).join("|");
+  if (productKey === commentaryProductsKey) return;
+  commentaryProductsKey = productKey;
+  topProductsCommentary = "";
+  commentaryState = "idle";
+}
+
+function renderTopProductsCommentary(currentTopProducts) {
+  const content = commentaryState === "ready"
+    ? escapeHtml(topProductsCommentary)
+    : commentaryState === "loading"
+      ? "Кишеньковий критик переглядає кошик…"
+      : commentaryState === "error"
+        ? escapeHtml(topProductsCommentary)
+        : "Натисніть — і кишеньковий критик складе дотепну репліку про ваш продуктовий каст.";
+  const buttonLabel = commentaryState === "loading"
+    ? "Критик думає…"
+    : commentaryState === "ready"
+      ? "Ще одна репліка"
+      : commentaryState === "error"
+        ? "Спробувати ще раз"
+        : "Почути критика";
+
+  return `
+    <aside class="top-products-commentary${commentaryState === "ready" ? " is-ready" : ""}" aria-labelledby="commentary-title">
+      <div class="commentary-bubble">
+        <p class="eyebrow">Кишеньковий критик</p>
+        <h3 id="commentary-title">${content}</h3>
+        <div class="commentary-actions">
+          <button class="commentary-button" type="button" data-top-products-commentary${commentaryState === "loading" ? " disabled" : ""}>${buttonLabel}</button>
+          <small>Надішлемо в OpenRouter лише назви й частоту ${currentTopProducts.length} товарів.</small>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+async function requestTopProductsCommentary() {
+  const requestedKey = commentaryProductsKey;
+  const productsForCommentary = topProducts.map(({ name, purchaseCount }) => ({ name, purchaseCount }));
+  commentaryState = "loading";
+  renderDashboard(false);
+
+  try {
+    const response = await fetch("/api/top-products-commentary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ products: productsForCommentary })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || typeof result.commentary !== "string") {
+      throw new Error(result.message || "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.");
+    }
+    topProductsCommentary = result.commentary;
+    commentaryState = "ready";
+  } catch (error) {
+    topProductsCommentary = error instanceof Error ? error.message : "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.";
+    commentaryState = "error";
+  }
+
+  if (requestedKey === commentaryProductsKey) renderDashboard(false);
 }
 
 function receiptWord(count) { return count === 1 ? "чеку" : "чеках"; }

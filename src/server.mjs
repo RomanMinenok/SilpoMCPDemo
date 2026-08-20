@@ -16,6 +16,7 @@ import {
   saveSession,
   sessionStoreMode
 } from "./lib/session-store.js";
+import { CommentaryError, createTopProductsCommentary, sanitizeTopProducts } from "./lib/openrouter-commentary.js";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -62,6 +63,15 @@ export async function handleRequest(request, response) {
       await saveSession(session);
       return data ? json(response, 200, data) : json(response, 401, { error: "AUTH_REQUIRED" });
     }
+    if (requestUrl.pathname === "/api/top-products-commentary" && request.method === "POST") {
+      if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
+      const body = await readJson(request);
+      const products = sanitizeTopProducts(body?.products);
+      if (!products.length) return json(response, 400, { error: "INVALID_PRODUCTS", message: "Немає товарів для коментаря." });
+      const commentary = await createTopProductsCommentary(products, origin);
+      await saveSession(session);
+      return json(response, 200, { commentary });
+    }
     if (requestUrl.pathname === "/api/auth/logout" && request.method === "POST") {
       closeUserSession(session);
       await deleteSession(session.id);
@@ -70,13 +80,34 @@ export async function handleRequest(request, response) {
     }
     return json(response, 404, { error: "NOT_FOUND" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Невідома помилка";
+    const message = error instanceof CommentaryError
+      ? error.message
+      : error instanceof Error ? error.message : "Невідома помилка";
     if (request.url?.startsWith("/api/auth/callback")) {
       response.writeHead(302, { Location: "/?auth_error=1#/", "Cache-Control": "no-store" });
       return response.end();
     }
     return json(response, 500, { error: "SERVER_ERROR", message });
   }
+}
+
+async function readJson(request) {
+  const body = typeof request.body === "string" ? request.body : await readRequestBody(request);
+  if (!body || body.length > 4096) throw new CommentaryError("Не вдалося прочитати набір товарів.");
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new CommentaryError("Не вдалося прочитати набір товарів.");
+  }
+}
+
+async function readRequestBody(request) {
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > 4096) throw new CommentaryError("Не вдалося прочитати набір товарів.");
+  }
+  return body;
 }
 
 async function getSession(request, response, origin) {
