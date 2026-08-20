@@ -236,9 +236,11 @@ footer { width: min(1420px, calc(100% - 72px)); margin: 0 auto; padding: 32px 0 
   .receipt-total strong { font-size: 2.7rem; }
   .ranking-section, .latest-section, .history-section { padding: 70px 0 80px; }
   .ranking-section { padding-top: 52px; }
-  .ranking-overview { display: grid; gap: 30px; margin-bottom: 30px; }
-  .ranking-left-panel { min-height: 0; grid-row: 2; }
-  .top-products-commentary { grid-row: 1; width: 100%; max-width: 560px; height: auto; min-height: 224px; justify-self: stretch; }
+  .ranking-overview { display: flex; flex-direction: column; gap: 26px; margin-bottom: 30px; }
+  .ranking-left-panel { display: contents; min-height: 0; }
+  .ranking-left-panel .section-heading { order: 1; width: 100%; margin-bottom: 0; }
+  .ranking-filter-panel { order: 2; width: 100%; }
+  .top-products-commentary { order: 3; width: 100%; max-width: none; height: auto; min-height: 224px; justify-self: stretch; }
   .commentary-bubble { padding: 25px 20px 20px 31px; box-shadow: 5px 5px 0 var(--ink); }
   .commentary-bubble h3 { font-size: min(var(--commentary-size), 1.35rem); }
   .commentary-actions { align-items: flex-start; flex-direction: column; gap: 12px; }

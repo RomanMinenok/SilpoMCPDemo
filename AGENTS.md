@@ -71,6 +71,19 @@ Write every Markdown file and every source-code or configuration comment in
 English. This rule applies to existing and new content. User-facing interface
 copy may remain Ukrainian when required by the product design.
 
+## Mobile Layout
+
+- Treat the ranking overview as a dedicated single-column layout on narrow
+  screens; do not let desktop grid columns or placement rules leak into the
+  mobile breakpoint.
+- Stack the ranking title, sorting explanation and period filters, then the
+  pocket critic, in that order. Each must use the full available content width.
+- A fixed-size critic card may be used on desktop, but its width must become
+  fluid on mobile and its text must remain contained without horizontal
+  overflow.
+- Keep the same page gutters and divider rhythm as the surrounding mobile
+  sections, rather than adding local offsets to repair a desktop layout.
+
 ## Testing Guidelines
 
 Add tests for analytics, normalization, privacy boundaries, OAuth state handling,
