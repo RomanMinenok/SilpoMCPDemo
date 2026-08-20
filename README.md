@@ -36,6 +36,32 @@ in-memory store that is cleared completely when the process stops.
 5. Start the first deployment. The API will become operational after Redis and
    the session secret are configured in the following steps.
 
+#### Environment Variables Detected During Import
+
+Vercel may show **5 Detected** because it reads the variable names from
+`.env.example`. The empty values in that file are intentional: it is a safe
+template and does not contain deployable credentials.
+
+| Variable | Required | Where the value comes from | Vercel environments |
+| --- | --- | --- | --- |
+| `UPSTASH_REDIS_REST_URL` | Yes | Added automatically by the Vercel Upstash integration, or copied from the database's **REST API** section in the Upstash Console | Production and Preview |
+| `UPSTASH_REDIS_REST_TOKEN` | Yes | Added automatically by the integration, or copied as the standard `UPSTASH_REDIS_REST_TOKEN` from the database's **REST API** section | Production and Preview |
+| `SESSION_SECRET` | Yes | Generated locally; it is not supplied by Vercel, Upstash, or Silpo | Production and Preview |
+| `APP_ORIGIN` | Recommended for production | The final public HTTPS origin shown by Vercel after the first deployment, for example `https://silpo-mcp-demo.vercel.app` | Production only |
+| `SILPO_MCP_URL` | No | The public Silpo MCP endpoint; the application already defaults to `https://mcp.silpo.ua/mcp` | Leave unset unless overriding the endpoint |
+
+If this form is shown before the first deployment:
+
+1. Supply the two Upstash values only if a database has already been created.
+2. Generate and supply `SESSION_SECRET` as described below.
+3. Remove or leave `APP_ORIGIN` empty until Vercel assigns the production
+   domain. Add it after the first deployment and scope it to Production only.
+4. Remove or leave `SILPO_MCP_URL` empty. If the form requires a value, use
+   `https://mcp.silpo.ua/mcp`.
+
+Never paste any of these values into source files, `.env.example`, GitHub, build
+logs, screenshots, or browser-side code.
+
 ### 2. Connect a Free Upstash Redis Database
 
 1. Open **Vercel Project → Storage → Create Database**.
@@ -50,13 +76,32 @@ The integration automatically adds these environment variables:
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
-Do not copy their values into the repository or `vercel.json`.
+If the integration is connected before deployment, do not create these
+variables manually. Open **Vercel Project → Settings → Environment Variables**
+and confirm that both exist for Production and Preview.
+
+To configure them manually instead:
+
+1. Open the database in the [Upstash Console](https://console.upstash.com/).
+2. Find the **REST API** or **Connect** section.
+3. Copy the HTTPS endpoint into `UPSTASH_REDIS_REST_URL`.
+4. Copy the standard token into `UPSTASH_REDIS_REST_TOKEN`.
+
+The application creates, refreshes, and deletes session keys, so it requires
+the standard token rather than the read-only token. Keep the token marked as
+sensitive. Do not copy either value into the repository or `vercel.json`. See
+the official [Upstash REST API documentation](https://upstash.com/docs/redis/features/restapi)
+for the current console location.
 
 ### 3. Add `SESSION_SECRET`
 
 Generate a secret locally:
 
     openssl rand -base64 48
+
+If OpenSSL is unavailable, use Node.js:
+
+    node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
 
 In Vercel, open **Settings → Environment Variables**, create
 `SESSION_SECRET`, and paste the generated value. Mark it as sensitive and add
@@ -73,13 +118,16 @@ environment:
 
     APP_ORIGIN=https://your-project.vercel.app
 
-Do not include a trailing slash. It is usually best to leave `APP_ORIGIN`
-unset for Preview deployments so the application can use the current
-`*.vercel.app` domain for its OAuth callback automatically. When using a custom
-domain, set `APP_ORIGIN` to its HTTPS origin instead.
+Copy the domain from the production deployment or from **Vercel Project →
+Settings → Domains**, then add the `https://` scheme. Use only the origin: do
+not include a path, query string, fragment, or trailing slash. It is usually
+best to leave `APP_ORIGIN` unset for Preview deployments so the application can
+use the current `*.vercel.app` domain for its OAuth callback automatically.
+When using a custom domain, set `APP_ORIGIN` to its HTTPS origin instead.
 
-You do not need to set `SILPO_MCP_URL` when using the default endpoint at
-https://mcp.silpo.ua/mcp.
+You do not need to set `SILPO_MCP_URL` when using the built-in default endpoint
+at https://mcp.silpo.ua/mcp. This value is not a credential. Only add the
+variable when intentionally connecting to a different compatible endpoint.
 
 ### 5. Redeploy and Verify
 
