@@ -1,0 +1,19 @@
+{
+  "name": "silpo-purchase-pulse",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.mjs",
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "lint": "node --check src/app.js && node --check src/lib/analytics.js && node --check src/lib/normalize-orders.js && node --check src/lib/silpo-mcp.js && node --check src/server.mjs",
+    "build": "node src/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0"
+  }
+}
