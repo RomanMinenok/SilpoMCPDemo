@@ -3,10 +3,9 @@ import { Redis } from "@upstash/redis";
 
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const memorySessions = new Map();
-const redisConfigured = Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-);
-const redis = redisConfigured ? Redis.fromEnv() : null;
+const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
 
 export function sessionStoreMode() {
   if (redis) return "encrypted-redis";
@@ -16,7 +15,7 @@ export function sessionStoreMode() {
 export function assertSessionStoreConfigured() {
   if (process.env.VERCEL === "1" && !redis) {
     throw new Error(
-      "Vercel потребує UPSTASH_REDIS_REST_URL і UPSTASH_REDIS_REST_TOKEN."
+      "Vercel потребує KV_REST_API_URL/KV_REST_API_TOKEN або відповідні UPSTASH_REDIS_REST змінні."
     );
   }
   if (redis && String(process.env.SESSION_SECRET || "").length < 32) {

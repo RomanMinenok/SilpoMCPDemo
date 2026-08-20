@@ -50,6 +50,12 @@ template and does not contain deployable credentials.
 | `APP_ORIGIN` | Recommended for production | The final public HTTPS origin shown by Vercel after the first deployment, for example `https://silpo-mcp-demo.vercel.app` | Production only |
 | `SILPO_MCP_URL` | No | The public Silpo MCP endpoint; the application already defaults to `https://mcp.silpo.ua/mcp` | Leave unset unless overriding the endpoint |
 
+Some Vercel storage integrations provide `KV_REST_API_URL` and
+`KV_REST_API_TOKEN` instead of the two `UPSTASH_REDIS_REST_*` names. The
+application supports both pairs; only one complete pair is required. If both
+exist, the Vercel-managed `KV_REST_API_*` pair takes precedence. The application
+does not use `KV_URL`, `REDIS_URL`, or `KV_REST_API_READ_ONLY_TOKEN`.
+
 If this form is shown before the first deployment:
 
 1. Supply the two Upstash values only if a database has already been created.
@@ -71,14 +77,22 @@ logs, screenshots, or browser-side code.
 5. Enable the required environments: at least **Production**, plus **Preview**
    if pull request deployments should work.
 
-The integration automatically adds these environment variables:
+Depending on the integration version, it automatically adds one of these
+equivalent pairs:
 
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
+or:
+
+- `KV_REST_API_URL`
+- `KV_REST_API_TOKEN`
+
 If the integration is connected before deployment, do not create these
 variables manually. Open **Vercel Project → Settings → Environment Variables**
-and confirm that both exist for Production and Preview.
+and confirm that one complete pair exists for Production and Preview. When the
+managed `KV_REST_API_*` pair already exists, manually added
+`UPSTASH_REDIS_REST_*` duplicates may be removed.
 
 To configure them manually instead:
 
@@ -141,8 +155,10 @@ After connecting the integration or changing environment variables, trigger a
 5. Signing out deletes both the Redis session and the HttpOnly cookie.
 
 If the API returns HTTP 500, first confirm that all three required variables
-are present: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and
-`SESSION_SECRET`.
+are present: `SESSION_SECRET` plus either the `KV_REST_API_*` pair or the
+`UPSTASH_REDIS_REST_*` pair. Also remove `SILPO_MCP_URL` temporarily to use the
+built-in endpoint and confirm that `APP_ORIGIN` is a valid HTTPS origin without
+a path or trailing slash.
 
 ## Commands
 

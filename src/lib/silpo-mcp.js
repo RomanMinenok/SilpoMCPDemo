@@ -4,7 +4,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { normalizeOfflineOrders, normalizeOnlineOrders, withinPeriod } from "./normalize-orders.js";
 
-const MCP_URL = new URL(process.env.SILPO_MCP_URL || "https://mcp.silpo.ua/mcp");
+const DEFAULT_MCP_URL = "https://mcp.silpo.ua/mcp";
 const CLIENT_NAME = "silpo-purchase-pulse";
 const CLIENT_VERSION = "0.3.0";
 
@@ -114,16 +114,17 @@ async function collectPurchaseAnalytics(client) {
 }
 
 function makeConnection(session, redirectUrl) {
-  const provider = createOAuthProvider(session, redirectUrl);
+  const mcpUrl = getMcpUrl();
+  const provider = createOAuthProvider(session, redirectUrl, mcpUrl);
   const client = new Client(
     { name: CLIENT_NAME, version: CLIENT_VERSION },
     { versionNegotiation: { mode: "legacy" } }
   );
-  const transport = new StreamableHTTPClientTransport(MCP_URL, { authProvider: provider });
+  const transport = new StreamableHTTPClientTransport(mcpUrl, { authProvider: provider });
   return { client, transport };
 }
 
-function createOAuthProvider(session, redirectUrl) {
+function createOAuthProvider(session, redirectUrl, mcpUrl) {
   const redirectHost = new URL(redirectUrl).hostname;
   const localRedirect = redirectHost === "localhost" || redirectHost === "127.0.0.1";
   return {
@@ -137,9 +138,9 @@ function createOAuthProvider(session, redirectUrl) {
       application_type: localRedirect ? "native" : "web"
     },
     state: () => session.state,
-    clientInformation: ({ issuer } = {}) => session.clientInformation[issuer || MCP_URL.origin],
+    clientInformation: ({ issuer } = {}) => session.clientInformation[issuer || mcpUrl.origin],
     saveClientInformation: (information, { issuer } = {}) => {
-      session.clientInformation[issuer || MCP_URL.origin] = information;
+      session.clientInformation[issuer || mcpUrl.origin] = information;
     },
     tokens: () => session.tokens || undefined,
     saveTokens: (tokens) => {
@@ -166,6 +167,15 @@ function createOAuthProvider(session, redirectUrl) {
       if (scope === "all" || scope === "discovery") session.discoveryState = null;
     }
   };
+}
+
+function getMcpUrl() {
+  const configured = String(process.env.SILPO_MCP_URL || DEFAULT_MCP_URL).trim();
+  try {
+    return new URL(configured);
+  } catch {
+    throw new Error("SILPO_MCP_URL must be a valid absolute URL.");
+  }
 }
 
 async function fetchOfflineOrders(client, dateStart, dateEnd) {
