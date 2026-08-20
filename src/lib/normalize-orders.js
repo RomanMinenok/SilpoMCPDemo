@@ -16,7 +16,7 @@ export function normalizeOfflineOrders(orders = []) {
       unit: item.unit || "од.",
       quantity: number(item.quantity),
       price: number(item.price),
-      image: item.catalogProduct?.image || item.image || null,
+      image: normalizeImageUrl(item.catalogProduct?.image || item.image),
       weighted: isWeighted(item.unit, item.catalogProduct?.weighted),
       excluded: BAG_PATTERN.test(item.name || "")
     }))
@@ -43,7 +43,7 @@ export function normalizeOnlineOrders(orders = []) {
           unit: "шт",
           quantity: number(item.quantity),
           price: number(item.price),
-          image: item.image || null,
+          image: normalizeImageUrl(item.image),
           weighted: !Number.isInteger(number(item.quantity)),
           excluded: BAG_PATTERN.test(item.name || "")
         }))
@@ -59,6 +59,16 @@ export function withinPeriod(orders, periodStart, periodEnd) {
       return Number.isFinite(time) && time >= start && time <= end;
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+export function normalizeImageUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function isWeighted(unit, catalogWeighted) {

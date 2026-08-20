@@ -84,7 +84,7 @@ function renderDashboard() {
   const productRows = topProducts.map((product, index) => `
     <a class="rank-row reveal" style="--delay:${index * 45}ms" href="#/product/${encodeURIComponent(product.id)}">
       <span class="rank-number">${String(index + 1).padStart(2, "0")}</span>
-      <span class="thumb-wrap">${product.image ? `<img src="${product.image}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : "<i>◌</i>"}</span>
+      <span class="thumb-wrap">${renderProductImage(product.image, "", " loading=\"lazy\"")}</span>
       <span class="rank-copy"><strong>${escapeHtml(product.name)}</strong><small>${product.purchaseCount} ${receiptWord(product.purchaseCount)} · ${formatQuantity(product)}</small></span>
       <span class="rank-meter" aria-hidden="true"><i style="width:${product.purchaseCount / maxPurchases * 100}%"></i></span>
       <span class="rank-price">${formatMoney(product.lastPrice)}<small>остання ціна</small></span>
@@ -139,7 +139,7 @@ function renderProduct(id) {
   renderShell(`
     <nav class="back-nav reveal"><a href="#/">${icons.back}<span>Усі покупки</span></a><span>Товар № ${escapeHtml(product.id)}</span></nav>
     <section class="product-hero">
-      <div class="product-photo reveal"><span class="rank-sticker">#${rank || "—"}<small>у вашому топі</small></span>${product.image ? `<img src="${product.image}" alt="${escapeHtml(product.name)}" referrerpolicy="no-referrer" />` : '<span class="image-placeholder">◌</span>'}</div>
+      <div class="product-photo reveal"><span class="rank-sticker">#${rank || "—"}<small>у вашому топі</small></span>${renderProductImage(product.image, product.name, "", '<span class="image-placeholder">◌</span>')}</div>
       <div class="product-copy reveal" style="--delay:80ms">
         <p class="eyebrow">${product.weighted ? "Ваговий товар" : escapeHtml(product.unit)}</p>
         <h1>${escapeHtml(product.name)}</h1>
@@ -231,6 +231,22 @@ function insightFor(product, rank) {
 function receiptWord(count) { return count === 1 ? "чеку" : "чеках"; }
 function shortDate(value) { return new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(value)); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
+
+function renderProductImage(value, alt, extraAttributes = "", fallback = "<i>◌</i>") {
+  const imageUrl = safeImageUrl(value);
+  if (!imageUrl) return fallback;
+  return `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}"${extraAttributes} referrerpolicy="no-referrer" />`;
+}
+
+function safeImageUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 function route() {
   if (!snapshot) return;
