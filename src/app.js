@@ -32,11 +32,18 @@ function formatMoney(value) {
 }
 
 function renderShell(content, detail = false, scrollToTop = true) {
+  const activePage = location.hash.startsWith("#/recent-purchases") ? "recent-purchases" : "top-products";
   app.innerHTML = `
     <header class="site-header">
-      <a class="wordmark" href="#/" aria-label="На головну">
+      <a class="wordmark" href="#/" aria-label="До Топ-10 товарів">
         <span class="wordmark-dot"></span><span>сільпо</span><em>/ зріз</em>
       </a>
+      ${snapshot ? `
+        <nav class="site-nav" aria-label="Основна навігація">
+          <a href="#/"${activePage === "top-products" ? " aria-current=\"page\"" : ""}>Топ-10</a>
+          <a href="#/recent-purchases"${activePage === "recent-purchases" ? " aria-current=\"page\"" : ""}>Останні покупки</a>
+        </nav>
+      ` : ""}
       <div class="header-actions">
         <div class="source-pill"><i></i>${snapshot?.source || "Silpo MCP"}</div>
         ${snapshot ? '<button class="text-button" data-logout>Вийти</button>' : ""}
@@ -147,18 +154,6 @@ function renderDashboard(scrollToTop = true) {
       </div>
       ${topProducts.length ? `<div class="rank-list">${productRows}</div>` : `<p class="ranking-empty" role="status">За вибраний період (${periodLabel}) покупок не знайдено.</p>`}
     </section>
-    <section class="latest-section" aria-labelledby="latest-title">
-      <div class="section-heading compact"><div><p class="eyebrow">Найсвіжіше</p><h2 id="latest-title">Останні чеки</h2></div></div>
-      <div class="checks-grid">
-        ${snapshot.orders.slice(0, 3).map((order) => `
-          <article class="check-card">
-            <span class="check-date">${date.format(new Date(order.createdAt))}</span>
-            <h3>${escapeHtml(order.magicName)}</h3>
-            <p>${escapeHtml(order.prediction || order.store)}</p>
-            <div><span>${order.products.filter((item) => !item.excluded).length} товарів</span><strong>${formatMoney(order.total)}</strong></div>
-          </article>`).join("")}
-      </div>
-    </section>
   `, false, scrollToTop);
   document.querySelectorAll("[data-period-key]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -167,6 +162,17 @@ function renderDashboard(scrollToTop = true) {
     });
   });
   document.querySelector("[data-top-products-commentary]")?.addEventListener("click", requestTopProductsCommentary);
+}
+
+function renderRecentPurchases() {
+  renderShell(`
+    <section class="placeholder-page" aria-labelledby="recent-purchases-title">
+      <p class="eyebrow">Нова сторінка</p>
+      <h1 id="recent-purchases-title">Останні<br><span>покупки</span></h1>
+      <p>Тут незабаром з’явиться історія ваших останніх покупок.</p>
+      <a class="secondary-button" href="#/">Переглянути Топ-10</a>
+    </section>
+  `);
 }
 
 function renderProduct(id) {
@@ -366,6 +372,7 @@ function route() {
   if (!snapshot) return;
   const match = location.hash.match(/^#\/product\/(.+)$/);
   if (match) renderProduct(decodeURIComponent(match[1]));
+  else if (location.hash === "#/recent-purchases") renderRecentPurchases();
   else if (!location.hash || location.hash === "#/" || location.hash === "#") renderDashboard();
   else renderNotFound();
 }

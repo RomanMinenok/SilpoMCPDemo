@@ -40,6 +40,13 @@ svg { width: 1.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-
 .wordmark { display: flex; align-items: baseline; gap: .35rem; text-decoration: none; font: 900 1.75rem/1 var(--display); letter-spacing: -.09em; }
 .wordmark em { color: var(--muted); font: 500 .82rem/1 var(--mono); letter-spacing: .02em; }
 .wordmark-dot { align-self: center; width: 11px; height: 11px; margin-right: 2px; border-radius: 50%; background: var(--orange); box-shadow: 10px 0 0 var(--tangerine), 5px -8px 0 var(--lime); }
+.site-nav { display: flex; align-self: stretch; align-items: center; gap: 28px; margin-left: 42px; margin-right: auto; }
+.site-nav a { position: relative; display: flex; align-items: center; align-self: stretch; color: var(--muted); text-decoration: none; font: 700 .7rem/1 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+.site-nav a::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 3px; background: transparent; }
+.site-nav a:hover { color: var(--orange); }
+.site-nav a:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
+.site-nav a[aria-current="page"] { color: var(--ink); }
+.site-nav a[aria-current="page"]::after { background: var(--orange); }
 .source-pill { display: flex; gap: .55rem; align-items: center; font: 600 .7rem/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
 .source-pill i { width: 7px; height: 7px; border-radius: 50%; background: #46a749; box-shadow: 0 0 0 4px #46a74922; }
 .header-actions { display: flex; align-items: center; gap: 22px; }
@@ -196,6 +203,12 @@ footer { width: min(1420px, calc(100% - 72px)); margin: 0 auto; padding: 32px 0 
 .privacy-receipt li span { color: var(--orange); font: 700 .7rem/1 var(--mono); }
 .connection-screen { min-height: calc(100vh - 170px); display: grid; place-items: center; align-content: center; text-align: center; }
 .connection-screen .eyebrow { margin-top: 34px; }
+.placeholder-page { min-height: calc(100vh - 170px); display: grid; align-content: center; justify-items: start; padding: 80px 0 110px; border-bottom: 1px solid var(--ink); }
+.placeholder-page .eyebrow { color: var(--orange); }
+.placeholder-page h1 { margin: 0; font: 900 clamp(3.8rem, 7.1vw, 7.6rem)/.86 var(--display); letter-spacing: -.08em; text-transform: uppercase; }
+.placeholder-page h1 span { color: var(--orange); }
+.placeholder-page > p:not(.eyebrow) { max-width: 420px; margin: 30px 0; color: var(--muted); font-size: 1.04rem; line-height: 1.55; }
+.placeholder-page .secondary-button { color: var(--ink); text-decoration: none; }
 .pulse-mark { display: flex; align-items: end; gap: 7px; height: 48px; }
 .pulse-mark i { width: 13px; background: var(--orange); animation: pulse 1s infinite alternate ease-in-out; }
 .pulse-mark i:nth-child(1) { height: 22px; }
@@ -224,9 +237,11 @@ footer { width: min(1420px, calc(100% - 72px)); margin: 0 auto; padding: 32px 0 
 
 @media (max-width: 680px) {
   .site-header, main, footer { width: min(100% - 32px, 1420px); }
-  .site-header { height: 72px; }
-  .source-pill { font-size: 0; }
-  .source-pill::after { content: "MCP"; font-size: .65rem; }
+  .site-header { height: 112px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 54px 1fr; }
+  .wordmark { font-size: 1.4rem; }
+  .wordmark em, .source-pill { display: none; }
+  .site-nav { grid-column: 1 / -1; grid-row: 2; gap: 22px; margin: 0; }
+  .site-nav a { align-self: stretch; font-size: .63rem; }
   .header-actions { gap: 12px; }
   .hero { min-height: auto; padding: 60px 0 70px; gap: 58px; }
   .hero h1 { font-size: clamp(3rem, 15vw, 5rem); }
@@ -269,6 +284,8 @@ footer { width: min(1420px, calc(100% - 72px)); margin: 0 auto; padding: 32px 0 
   .insight-strip { align-items: flex-start; margin-bottom: 70px; padding: 22px; }
   .login-layout { padding: 60px 0 80px; gap: 65px; }
   .login-copy h1, .connection-screen h1 { font-size: clamp(3rem, 15vw, 5rem); }
+  .placeholder-page { min-height: calc(100vh - 188px); padding: 60px 0 80px; }
+  .placeholder-page h1 { font-size: clamp(3rem, 15vw, 5rem); }
   .privacy-receipt { padding: 36px 24px; filter: drop-shadow(8px 12px 0 #dcdcd5); }
 }
 
