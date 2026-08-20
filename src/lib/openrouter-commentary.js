@@ -19,12 +19,43 @@ export function sanitizeTopProducts(value) {
     .slice(0, 10);
 }
 
-export async function createTopProductsCommentary(value, origin) {
-  const apiKey = String(process.env.OPENROUTER_API_KEY || "").trim();
-  if (!apiKey) throw new CommentaryError("AI-коментар ще не налаштований.");
+export function sanitizeRecentPurchases(value) {
+  if (!Array.isArray(value)) return [];
 
+  return value
+    .map((purchase) => ({
+      name: String(purchase?.name || "").replace(/\s+/g, " ").trim().slice(0, 120),
+      itemCount: Math.max(0, Math.min(Math.round(Number(purchase?.itemCount) || 0), 1000))
+    }))
+    .filter((purchase) => purchase.name)
+    .slice(0, 10);
+}
+
+export async function createTopProductsCommentary(value, origin) {
   const products = sanitizeTopProducts(value);
   if (!products.length) throw new CommentaryError("Немає товарів для коментаря.");
+
+  return createCommentary({
+    origin,
+    system: "Ти доброзичливий комікс-критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про цей топ товарів: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
+    prompt: `Топ товарів за кількістю чеків:\n${products.map((product, index) => `${index + 1}. ${product.name} — ${product.purchaseCount}`).join("\n")}`
+  });
+}
+
+export async function createRecentPurchasesCommentary(value, origin) {
+  const purchases = sanitizeRecentPurchases(value);
+  if (!purchases.length) throw new CommentaryError("Немає чеків для коментаря.");
+
+  return createCommentary({
+    origin,
+    system: "Ти доброзичливий комікс-критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про останні чеки: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі.",
+    prompt: `Останні чеки:\n${purchases.map((purchase, index) => `${index + 1}. ${purchase.name} — ${purchase.itemCount} товарів`).join("\n")}`
+  });
+}
+
+async function createCommentary({ origin, system, prompt }) {
+  const apiKey = String(process.env.OPENROUTER_API_KEY || "").trim();
+  if (!apiKey) throw new CommentaryError("AI-коментар ще не налаштований.");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -44,14 +75,8 @@ export async function createTopProductsCommentary(value, origin) {
         max_tokens: 120,
         reasoning: { effort: "none" },
         messages: [
-          {
-            role: "system",
-            content: "Ти доброзичливий комікс-критик продуктових кошиків. Напиши українською одну коротку, теплу й гумористичну репліку про цей топ товарів: максимум 2 речення і 280 символів. Не вигадуй фактів, не згадуй ціни, здоров'я, особисті дані чи бренди поза списком. Відповідай лише готовою реплікою без лапок, заголовків і емодзі."
-          },
-          {
-            role: "user",
-            content: `Топ товарів за кількістю чеків:\n${products.map((product, index) => `${index + 1}. ${product.name} — ${product.purchaseCount}`).join("\n")}`
-          }
+          { role: "system", content: system },
+          { role: "user", content: prompt }
         ]
       }),
       signal: controller.signal

@@ -69,6 +69,18 @@ export async function fetchPurchaseAnalytics(session, redirectUrl) {
   }
 }
 
+export async function fetchRecentPurchasePage(session, redirectUrl, { offset = 0, limit = 10 } = {}) {
+  if (!session.tokens) return null;
+  const connection = makeConnection(session, redirectUrl);
+
+  try {
+    await connection.client.connect(connection.transport);
+    return await collectRecentPurchasePage(connection.client, offset, limit);
+  } finally {
+    await closeConnection(connection);
+  }
+}
+
 export function closeUserSession(session) {
   session.tokens = null;
   session.codeVerifier = null;
@@ -88,13 +100,13 @@ async function collectPurchaseAnalytics(client) {
   let onlineOrders = [];
 
   try {
-    offlineOrders = await fetchOfflineOrders(client, periodStart, periodEnd);
+    offlineOrders = (await fetchOfflineOrderWindow(client, periodStart, periodEnd)).orders;
   } catch {
     warnings.push("Не вдалося завантажити покупки з фізичних магазинів.");
   }
 
   try {
-    onlineOrders = await fetchOnlineOrders(client, periodStart);
+    onlineOrders = (await fetchOnlineOrderWindow(client, periodStart)).orders;
   } catch {
     warnings.push("Не вдалося завантажити онлайн-замовлення.");
   }
@@ -110,6 +122,42 @@ async function collectPurchaseAnalytics(client) {
       periodStart,
       periodEnd
     )
+  };
+}
+
+async function collectRecentPurchasePage(client, offset, limit) {
+  const now = new Date();
+  const periodEnd = now.toISOString();
+  const periodStartDate = new Date(now);
+  periodStartDate.setUTCFullYear(periodStartDate.getUTCFullYear() - 1);
+  const periodStart = periodStartDate.toISOString();
+  const windowSize = offset + limit;
+  const warnings = [];
+  let offlinePage = { orders: [], hasMore: false };
+  let onlinePage = { orders: [], hasMore: false };
+
+  try {
+    offlinePage = await fetchOfflineOrderWindow(client, periodStart, periodEnd, windowSize);
+  } catch {
+    warnings.push("Не вдалося завантажити покупки з фізичних магазинів.");
+  }
+
+  try {
+    onlinePage = await fetchOnlineOrderWindow(client, periodStart, windowSize);
+  } catch {
+    warnings.push("Не вдалося завантажити онлайн-замовлення.");
+  }
+
+  const orders = withinPeriod(
+    [...normalizeOfflineOrders(offlinePage.orders), ...normalizeOnlineOrders(onlinePage.orders)],
+    periodStart,
+    periodEnd
+  );
+
+  return {
+    orders: orders.slice(offset, offset + limit),
+    hasMore: offlinePage.hasMore || onlinePage.hasMore || orders.length > offset + limit,
+    warnings
   };
 }
 
@@ -178,7 +226,31 @@ function getMcpUrl() {
   }
 }
 
-async function fetchOfflineOrders(client, dateStart, dateEnd) {
+async function fetchOfflineOrderWindow(client, dateStart, dateEnd, maxItems = 500) {
+  const context = await getOfflineOrderContext(client);
+  const orders = [];
+  let hasMore = false;
+
+  for (let offset = 0; offset < maxItems; offset += 10) {
+    const limit = Math.min(10, maxItems - offset);
+    const page = await callTool(client, "silpo_get_my_offline_orders", {
+      ...context,
+      dateStart,
+      dateEnd,
+      limit,
+      offset
+    });
+    const pageOrders = page.orders || [];
+    orders.push(...pageOrders);
+    const total = Number(page.meta?.total);
+    hasMore = Number.isFinite(total) ? orders.length < total : pageOrders.length === limit;
+    if ((Number.isFinite(total) && orders.length >= total) || pageOrders.length < limit) break;
+  }
+
+  return { orders: orders.slice(0, maxItems), hasMore };
+}
+
+async function getOfflineOrderContext(client) {
   const cartPointer = await callTool(client, "silpo_get_my_shopping_cart", {});
   const cartId = cartPointer.shoppingCartId;
   if (!cartId) throw new Error("Кошик користувача не знайдено.");
@@ -193,34 +265,23 @@ async function fetchOfflineOrders(client, dateStart, dateEnd) {
     throw new Error("У кошику бракує параметрів для історії офлайн-покупок.");
   }
 
-  const orders = [];
-  for (let offset = 0; offset < 500; offset += 10) {
-    const page = await callTool(client, "silpo_get_my_offline_orders", {
-      branchId,
-      deliveryType,
-      timeslotStart,
-      timeslotEnd,
-      dateStart,
-      dateEnd,
-      limit: 10,
-      offset
-    });
-    orders.push(...(page.orders || []));
-    if (orders.length >= Number(page.meta?.total || 0) || !(page.orders || []).length) break;
-  }
-  return orders;
+  return { branchId, deliveryType, timeslotStart, timeslotEnd };
 }
 
-async function fetchOnlineOrders(client, periodStart) {
+async function fetchOnlineOrderWindow(client, periodStart, maxItems = 500) {
   const orders = [];
-  for (let offset = 0; offset < 500; offset += 50) {
-    const page = await callTool(client, "silpo_get_my_online_orders", { limit: 50, offset });
+  let hasMore = false;
+  for (let offset = 0; offset < maxItems; offset += 50) {
+    const limit = Math.min(50, maxItems - offset);
+    const page = await callTool(client, "silpo_get_my_online_orders", { limit, offset });
     const pageOrders = page.orders || [];
     orders.push(...pageOrders);
     const reachedOldOrders = pageOrders.some((order) => new Date(order.createdAt) < new Date(periodStart));
-    if (orders.length >= Number(page.meta?.total || 0) || !pageOrders.length || reachedOldOrders) break;
+    const total = Number(page.meta?.total);
+    hasMore = !reachedOldOrders && (Number.isFinite(total) ? orders.length < total : pageOrders.length === limit);
+    if ((Number.isFinite(total) && orders.length >= total) || pageOrders.length < limit || reachedOldOrders) break;
   }
-  return orders;
+  return { orders: orders.slice(0, maxItems), hasMore };
 }
 
 async function callTool(client, name, args) {

@@ -7,6 +7,7 @@ import {
   closeUserSession,
   createUserSession,
   fetchPurchaseAnalytics,
+  fetchRecentPurchasePage,
   finishAuthorization,
   startAuthorization
 } from "./lib/silpo-mcp.js";
@@ -16,7 +17,13 @@ import {
   saveSession,
   sessionStoreMode
 } from "./lib/session-store.js";
-import { CommentaryError, createTopProductsCommentary, sanitizeTopProducts } from "./lib/openrouter-commentary.js";
+import {
+  CommentaryError,
+  createRecentPurchasesCommentary,
+  createTopProductsCommentary,
+  sanitizeRecentPurchases,
+  sanitizeTopProducts
+} from "./lib/openrouter-commentary.js";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -63,12 +70,27 @@ export async function handleRequest(request, response) {
       await saveSession(session);
       return data ? json(response, 200, data) : json(response, 401, { error: "AUTH_REQUIRED" });
     }
+    if (requestUrl.pathname === "/api/recent-purchases" && request.method === "GET") {
+      const offset = boundedInteger(requestUrl.searchParams.get("offset"), 0, 490, 0);
+      const data = await fetchRecentPurchasePage(session, `${origin}/api/auth/callback`, { offset, limit: 10 });
+      await saveSession(session);
+      return data ? json(response, 200, data) : json(response, 401, { error: "AUTH_REQUIRED" });
+    }
     if (requestUrl.pathname === "/api/top-products-commentary" && request.method === "POST") {
       if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const body = await readJson(request);
       const products = sanitizeTopProducts(body?.products);
       if (!products.length) return json(response, 400, { error: "INVALID_PRODUCTS", message: "Немає товарів для коментаря." });
       const commentary = await createTopProductsCommentary(products, origin);
+      await saveSession(session);
+      return json(response, 200, { commentary });
+    }
+    if (requestUrl.pathname === "/api/recent-purchases-commentary" && request.method === "POST") {
+      if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
+      const body = await readJson(request);
+      const purchases = sanitizeRecentPurchases(body?.purchases);
+      if (!purchases.length) return json(response, 400, { error: "INVALID_PURCHASES", message: "Немає чеків для коментаря." });
+      const commentary = await createRecentPurchasesCommentary(purchases, origin);
       await saveSession(session);
       return json(response, 200, { commentary });
     }
@@ -93,11 +115,11 @@ export async function handleRequest(request, response) {
 
 async function readJson(request) {
   const body = typeof request.body === "string" ? request.body : await readRequestBody(request);
-  if (!body || body.length > 4096) throw new CommentaryError("Не вдалося прочитати набір товарів.");
+  if (!body || body.length > 4096) throw new CommentaryError("Не вдалося прочитати запит для коментаря.");
   try {
     return JSON.parse(body);
   } catch {
-    throw new CommentaryError("Не вдалося прочитати набір товарів.");
+    throw new CommentaryError("Не вдалося прочитати запит для коментаря.");
   }
 }
 
@@ -105,7 +127,7 @@ async function readRequestBody(request) {
   let body = "";
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 4096) throw new CommentaryError("Не вдалося прочитати набір товарів.");
+    if (body.length > 4096) throw new CommentaryError("Не вдалося прочитати запит для коментаря.");
   }
   return body;
 }
@@ -185,6 +207,11 @@ function clearCookie(response, origin) {
     "Set-Cookie",
     `silpo_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`
   );
+}
+
+function boundedInteger(value, minimum, maximum, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
 const isDirectRun = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -10,6 +10,15 @@ let selectedPeriodKey = "12m";
 let topProductsCommentary = "";
 let commentaryState = "idle";
 let commentaryProductsKey = "";
+let recentPurchases = [];
+let recentPurchasesOffset = 0;
+let recentPurchasesHasMore = false;
+let recentPurchasesWarnings = [];
+let recentPurchasesState = "idle";
+let recentPurchasesError = "";
+let recentPurchasesCommentary = "";
+let recentPurchasesCommentaryState = "idle";
+let recentPurchasesCommentaryKey = "";
 
 const productPeriods = [
   { key: "7d", days: 7, label: "7 днів" },
@@ -32,7 +41,9 @@ function formatMoney(value) {
 }
 
 function renderShell(content, detail = false, scrollToTop = true) {
-  const activePage = location.hash.startsWith("#/recent-purchases") ? "recent-purchases" : "top-products";
+  const activePage = location.hash.startsWith("#/recent-purchases") || location.hash.startsWith("#/receipt/")
+    ? "recent-purchases"
+    : "top-products";
   app.innerHTML = `
     <header class="site-header">
       <a class="wordmark" href="#/" aria-label="До Топ-10 товарів">
@@ -164,15 +175,117 @@ function renderDashboard(scrollToTop = true) {
   document.querySelector("[data-top-products-commentary]")?.addEventListener("click", requestTopProductsCommentary);
 }
 
-function renderRecentPurchases() {
+function renderRecentPurchases(scrollToTop = true) {
+  const currentPage = recentPurchasesOffset / 10 + 1;
+  const canShowCommentary = recentPurchasesState === "ready" && recentPurchases.length;
+  const recentSummary = summarizeOrders(recentPurchases);
+  resetRecentPurchasesCommentaryFor(recentPurchases);
+  const purchaseRows = recentPurchases.map((purchase, index) => {
+    const itemCount = visibleItemCount(purchase);
+    return `
+      <a class="receipt-row reveal" style="--delay:${index * 45}ms" href="#/receipt/${encodeURIComponent(purchase.id)}">
+        <span class="receipt-row-number">${String(recentPurchasesOffset + index + 1).padStart(2, "0")}</span>
+        <span class="receipt-row-date">${shortDate(purchase.createdAt)}</span>
+        <span class="receipt-row-copy"><strong>${escapeHtml(purchase.magicName)}</strong><small>${escapeHtml(purchase.prediction || purchase.store)}</small></span>
+        <span class="receipt-row-total"><strong>${formatMoney(purchase.total)}</strong><small>${itemCount} ${itemWord(itemCount)}</small></span>
+        <span class="arrow-button">${icons.arrow}</span>
+      </a>
+    `;
+  }).join("");
+
   renderShell(`
-    <section class="placeholder-page" aria-labelledby="recent-purchases-title">
-      <p class="eyebrow">Нова сторінка</p>
-      <h1 id="recent-purchases-title">Останні<br><span>покупки</span></h1>
-      <p>Тут незабаром з’явиться історія ваших останніх покупок.</p>
-      <a class="secondary-button" href="#/">Переглянути Топ-10</a>
+    <section class="hero recent-hero">
+      <div class="hero-copy reveal">
+        <p class="eyebrow">Останні покупки</p>
+        <h1>Що ви купляли<br><span>останнім часом?</span></h1>
+        <p class="hero-note">Зібрали чеки від найсвіжішого до найдавнішого. Відкрийте будь-який, щоб побачити товари й ціни в ньому.</p>
+      </div>
+      <div class="receipt-card reveal" style="--delay:100ms">
+        <div class="receipt-top"><span>${icons.spark} ОСТАННІ ЧЕКИ</span><b>${recentSummary.orders} чеків</b></div>
+        <div class="receipt-total"><small>Покупок на цій сторінці на</small><strong>${formatMoney(recentSummary.spent)}</strong></div>
+        <div class="receipt-stats">
+          <div><small>Зекономлено</small><b>${formatMoney(recentSummary.saved)}</b></div>
+          <div><small>Балабонуси</small><b>+${money.format(recentSummary.bonuses)}</b></div>
+        </div>
+        <div class="barcode" aria-hidden="true"></div><p>Показано по 10 чеків за раз.</p>
+      </div>
     </section>
-  `);
+    <section class="ranking-section recent-purchases-section" aria-labelledby="recent-purchases-title">
+      <div class="ranking-overview">
+        <div class="ranking-left-panel">
+          <div class="section-heading"><div><p class="eyebrow">Хронологія</p><h2 id="recent-purchases-title">Ваші чеки</h2></div></div>
+          <div class="ranking-filter-panel">
+            <p class="ranking-explanation">Показуємо по 10 чеків за раз. Кожна наступна сторінка завантажується окремо через Silpo MCP.</p>
+          </div>
+        </div>
+        ${canShowCommentary ? renderRecentPurchasesCommentary(recentPurchases) : ""}
+      </div>
+      ${recentPurchasesWarnings.length ? `<div class="warning-bar">${recentPurchasesWarnings.map(escapeHtml).join(" ")}</div>` : ""}
+      ${recentPurchasesState === "loading" ? `<p class="ranking-empty" role="status">Завантажуємо чеки…</p>` : ""}
+      ${recentPurchasesState === "error" ? `<div class="error-note" role="alert">${escapeHtml(recentPurchasesError)} <button class="text-button" type="button" data-retry-recent>Спробувати ще раз</button></div>` : ""}
+      ${recentPurchasesState === "ready" && !recentPurchases.length ? `<p class="ranking-empty" role="status">За останній рік чеків не знайдено.</p>` : ""}
+      ${recentPurchasesState === "ready" && recentPurchases.length ? `
+        <div class="receipt-list">${purchaseRows}</div>
+        <nav class="pagination" aria-label="Сторінки останніх покупок">
+          <button class="pagination-button" type="button" data-recent-page="previous"${recentPurchasesOffset === 0 ? " disabled" : ""}>${icons.back}<span>Попередні</span></button>
+          <span class="pagination-current">Сторінка ${currentPage}</span>
+          <button class="pagination-button" type="button" data-recent-page="next"${recentPurchasesHasMore ? "" : " disabled"}><span>Наступні</span>${icons.arrow}</button>
+        </nav>
+      ` : ""}
+    </section>
+  `, false, scrollToTop);
+  document.querySelector("[data-retry-recent]")?.addEventListener("click", () => loadRecentPurchasesPage(recentPurchasesOffset));
+  document.querySelectorAll("[data-recent-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const offset = button.dataset.recentPage === "next" ? recentPurchasesOffset + 10 : recentPurchasesOffset - 10;
+      loadRecentPurchasesPage(offset);
+    });
+  });
+  document.querySelector("[data-recent-purchases-commentary]")?.addEventListener("click", requestRecentPurchasesCommentary);
+  if (recentPurchasesState === "idle") void loadRecentPurchasesPage(0);
+}
+
+function renderReceipt(id) {
+  const receipt = findReceipt(id);
+  if (!receipt) return renderNotFound();
+  const items = receipt.products.filter((item) => !item.excluded);
+  const itemCount = visibleItemCount(receipt);
+  const itemsTotal = items.reduce((total, item) => total + item.quantity * item.price, 0);
+
+  renderShell(`
+    <nav class="back-nav reveal"><a href="#/recent-purchases">${icons.back}<span>Останні покупки</span></a><span>Чек поточної сесії</span></nav>
+    <section class="receipt-detail-hero">
+      <div class="receipt-detail-summary reveal">
+        <p class="eyebrow">${shortDate(receipt.createdAt)}</p>
+        <h1>${escapeHtml(receipt.magicName)}</h1>
+        <p>${escapeHtml(receipt.prediction || receipt.store)}</p>
+        <dl>
+          <div><dt>Усього</dt><dd>${formatMoney(receipt.total)}</dd></div>
+          <div><dt>Товарів</dt><dd>${itemCount}</dd></div>
+          <div><dt>Знижка</dt><dd>${formatMoney(receipt.discount)}</dd></div>
+        </dl>
+      </div>
+      <aside class="receipt-detail-ticket reveal" style="--delay:80ms">
+        <span>${icons.cart}</span>
+        <small>Чек із історії</small>
+        <strong>${formatMoney(receipt.total)}</strong>
+        <p>${date.format(new Date(receipt.createdAt))}</p>
+      </aside>
+    </section>
+    <section class="receipt-items-section" aria-labelledby="receipt-items-title">
+      <div class="section-heading compact"><div><p class="eyebrow">Перелік у чеку</p><h2 id="receipt-items-title">Товари й ціни</h2></div><p>Ціни зафіксовані під час цієї покупки, а не є поточними цінами каталогу.</p></div>
+      ${items.length ? `<div class="receipt-items-list">${items.map((item, index) => `
+        <article class="receipt-item-row">
+          <span class="receipt-item-number">${String(index + 1).padStart(2, "0")}</span>
+          <span class="receipt-item-image">${renderProductImage(item.image, "", " loading=\"lazy\"")}</span>
+          <span class="receipt-item-name"><strong>${escapeHtml(item.name)}</strong><small>${formatItemQuantity(item)}</small></span>
+          <span class="receipt-item-price"><small>Ціна</small><strong>${formatMoney(item.price)}</strong></span>
+          <span class="receipt-item-total"><small>Сума</small><strong>${formatMoney(item.quantity * item.price)}</strong></span>
+        </article>
+      `).join("")}</div>
+      <div class="receipt-items-total"><span>Товари у чеку</span><strong>${formatMoney(itemsTotal)}</strong></div>` : `<p class="ranking-empty" role="status">У цьому чеку немає товарів для відображення.</p>`}
+    </section>
+  `, true);
 }
 
 function renderProduct(id) {
@@ -251,6 +364,15 @@ async function logout() {
   topProductsCommentary = "";
   commentaryState = "idle";
   commentaryProductsKey = "";
+  recentPurchases = [];
+  recentPurchasesOffset = 0;
+  recentPurchasesHasMore = false;
+  recentPurchasesWarnings = [];
+  recentPurchasesState = "idle";
+  recentPurchasesError = "";
+  recentPurchasesCommentary = "";
+  recentPurchasesCommentaryState = "idle";
+  recentPurchasesCommentaryKey = "";
   renderLogin();
 }
 
@@ -284,30 +406,41 @@ function resetCommentaryFor(currentTopProducts) {
 }
 
 function renderTopProductsCommentary(currentTopProducts) {
-  const content = commentaryState === "ready"
-    ? escapeHtml(topProductsCommentary)
-    : commentaryState === "loading"
+  return renderPocketCritic({
+    action: "top-products-commentary",
+    commentary: topProductsCommentary,
+    disclosure: `Лише назви й частота ${currentTopProducts.length} товарів → OpenRouter`,
+    emptyMessage: "Натисніть — і кишеньковий критик складе дотепну репліку про ваш продуктовий каст.",
+    state: commentaryState,
+    titleId: "commentary-title"
+  });
+}
+
+function renderPocketCritic({ action, commentary, disclosure, emptyMessage, state, titleId }) {
+  const content = state === "ready"
+    ? escapeHtml(commentary)
+    : state === "loading"
       ? "Кишеньковий критик переглядає кошик…"
-      : commentaryState === "error"
-        ? escapeHtml(topProductsCommentary)
-        : "Натисніть — і кишеньковий критик складе дотепну репліку про ваш продуктовий каст.";
-  const buttonLabel = commentaryState === "loading"
+      : state === "error"
+        ? escapeHtml(commentary)
+        : emptyMessage;
+  const buttonLabel = state === "loading"
     ? "Критик думає…"
-    : commentaryState === "ready"
+    : state === "ready"
       ? "Ще одна репліка"
-      : commentaryState === "error"
+      : state === "error"
         ? "Спробувати ще раз"
         : "Почути критика";
   const commentarySize = commentaryTextSize(content);
 
   return `
-    <aside class="top-products-commentary${commentaryState === "ready" ? " is-ready" : ""}" aria-labelledby="commentary-title">
+    <aside class="top-products-commentary${state === "ready" ? " is-ready" : ""}" aria-labelledby="${titleId}">
       <div class="commentary-bubble">
         <p class="eyebrow">Кишеньковий критик</p>
-        <h3 id="commentary-title" style="--commentary-size:${commentarySize}">${content}</h3>
+        <h3 id="${titleId}" style="--commentary-size:${commentarySize}">${content}</h3>
         <div class="commentary-actions">
-          <button class="commentary-button" type="button" data-top-products-commentary${commentaryState === "loading" ? " disabled" : ""}>${buttonLabel}</button>
-          <small>Лише назви й частота ${currentTopProducts.length} товарів → OpenRouter</small>
+          <button class="commentary-button" type="button" data-${action}${state === "loading" ? " disabled" : ""}>${buttonLabel}</button>
+          <small>${disclosure}</small>
         </div>
       </div>
     </aside>
@@ -348,7 +481,90 @@ async function requestTopProductsCommentary() {
   if (requestedKey === commentaryProductsKey) renderDashboard(false);
 }
 
+async function loadRecentPurchasesPage(offset) {
+  recentPurchasesOffset = Math.max(0, offset);
+  recentPurchasesState = "loading";
+  recentPurchasesError = "";
+  renderRecentPurchases(false);
+
+  try {
+    const response = await fetch(`/api/recent-purchases?offset=${recentPurchasesOffset}`, { cache: "no-store" });
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      snapshot = null;
+      return renderLogin("Сесію завершено. Увійдіть ще раз, щоб завантажити останні покупки.");
+    }
+    if (!response.ok || !Array.isArray(result.orders)) {
+      throw new Error(result.message || "Не вдалося завантажити останні покупки.");
+    }
+    recentPurchases = result.orders;
+    recentPurchasesHasMore = Boolean(result.hasMore);
+    recentPurchasesWarnings = Array.isArray(result.warnings) ? result.warnings : [];
+    recentPurchasesState = "ready";
+  } catch (error) {
+    recentPurchases = [];
+    recentPurchasesHasMore = false;
+    recentPurchasesWarnings = [];
+    recentPurchasesError = error instanceof Error ? error.message : "Не вдалося завантажити останні покупки.";
+    recentPurchasesState = "error";
+  }
+
+  if (location.hash === "#/recent-purchases") renderRecentPurchases(false);
+}
+
+function resetRecentPurchasesCommentaryFor(purchases) {
+  const purchasesKey = purchases.map((purchase) => purchase.id).join("|");
+  if (purchasesKey === recentPurchasesCommentaryKey) return;
+  recentPurchasesCommentaryKey = purchasesKey;
+  recentPurchasesCommentary = "";
+  recentPurchasesCommentaryState = "idle";
+}
+
+function renderRecentPurchasesCommentary(purchases) {
+  return renderPocketCritic({
+    action: "recent-purchases-commentary",
+    commentary: recentPurchasesCommentary,
+    disclosure: `Лише назви й кількість товарів ${purchases.length} чеків → OpenRouter`,
+    emptyMessage: "Натисніть — і кишеньковий критик складе дотепну репліку про ваші останні покупки.",
+    state: recentPurchasesCommentaryState,
+    titleId: "recent-purchases-commentary-title"
+  });
+}
+
+async function requestRecentPurchasesCommentary() {
+  const requestedKey = recentPurchasesCommentaryKey;
+  const purchasesForCommentary = recentPurchases.map((purchase) => ({
+    name: purchase.magicName,
+    itemCount: visibleItemCount(purchase)
+  }));
+  recentPurchasesCommentaryState = "loading";
+  renderRecentPurchases(false);
+
+  try {
+    const response = await fetch("/api/recent-purchases-commentary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purchases: purchasesForCommentary })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || typeof result.commentary !== "string") {
+      throw new Error(result.message || "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.");
+    }
+    recentPurchasesCommentary = result.commentary;
+    recentPurchasesCommentaryState = "ready";
+  } catch (error) {
+    recentPurchasesCommentary = error instanceof Error ? error.message : "Кишеньковий критик саме пішов по хліб. Спробуйте ще раз.";
+    recentPurchasesCommentaryState = "error";
+  }
+
+  if (requestedKey === recentPurchasesCommentaryKey && location.hash === "#/recent-purchases") renderRecentPurchases(false);
+}
+
 function receiptWord(count) { return count === 1 ? "чеку" : "чеках"; }
+function itemWord(count) { return count === 1 ? "товар" : count > 1 && count < 5 ? "товари" : "товарів"; }
+function visibleItemCount(order) { return order.products.filter((item) => !item.excluded).length; }
+function formatItemQuantity(item) { return `${item.quantity.toLocaleString("uk-UA", { maximumFractionDigits: 3 })} ${escapeHtml(item.unit)}`; }
+function findReceipt(id) { return [...recentPurchases, ...(snapshot?.orders || [])].find((receipt) => String(receipt.id) === String(id)); }
 function shortDate(value) { return new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(value)); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
 
@@ -371,7 +587,9 @@ function safeImageUrl(value) {
 function route() {
   if (!snapshot) return;
   const match = location.hash.match(/^#\/product\/(.+)$/);
+  const receiptMatch = location.hash.match(/^#\/receipt\/(.+)$/);
   if (match) renderProduct(decodeURIComponent(match[1]));
+  else if (receiptMatch) renderReceipt(decodeURIComponent(receiptMatch[1]));
   else if (location.hash === "#/recent-purchases") renderRecentPurchases();
   else if (!location.hash || location.hash === "#/" || location.hash === "#") renderDashboard();
   else renderNotFound();

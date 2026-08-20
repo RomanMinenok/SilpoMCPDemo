@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeTopProducts } from "../src/lib/openrouter-commentary.js";
+import { sanitizeRecentPurchases, sanitizeTopProducts } from "../src/lib/openrouter-commentary.js";
 
 test("allows only top-product names and receipt frequencies for comic commentary", () => {
   const products = sanitizeTopProducts([
@@ -19,4 +19,19 @@ test("allows only top-product names and receipt frequencies for comic commentary
 
 test("rejects a non-array commentary payload", () => {
   assert.deepEqual(sanitizeTopProducts({ name: "Синтетичний товар" }), []);
+});
+
+test("allows only recent purchase names and visible item counts for comic commentary", () => {
+  const purchases = sanitizeRecentPurchases([
+    { id: "private-order-id", name: "  Тестовий  чек  ", itemCount: 3.4, total: 999, store: "Private address" },
+    { name: "Ще один чек", itemCount: -5, products: [{ name: "Private product" }] },
+    { name: "", itemCount: 2 }
+  ]);
+
+  assert.deepEqual(purchases, [
+    { name: "Тестовий чек", itemCount: 3 },
+    { name: "Ще один чек", itemCount: 0 }
+  ]);
+  assert.equal(JSON.stringify(purchases).includes("private-order-id"), false);
+  assert.equal(JSON.stringify(purchases).includes("Private address"), false);
 });
