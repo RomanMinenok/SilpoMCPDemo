@@ -5,7 +5,13 @@ import { join } from "node:path";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const source = join(projectRoot, "src");
 const destination = join(projectRoot, "dist");
+
 await rm(destination, { recursive: true, force: true });
-await mkdir(destination, { recursive: true });
-await cp(source, destination, { recursive: true, filter: (path) => !path.endsWith("build.mjs") });
-console.log("Локальний runtime створено у dist/. Запуск: node dist/server.mjs");
+await mkdir(join(destination, "lib"), { recursive: true });
+await Promise.all([
+  cp(join(source, "index.html"), join(destination, "index.html")),
+  cp(join(source, "app.js"), join(destination, "app.js")),
+  cp(join(source, "styles.css"), join(destination, "styles.css")),
+  cp(join(source, "lib", "analytics.js"), join(destination, "lib", "analytics.js"))
+]);
+console.log("Vercel static output створено у dist/.");

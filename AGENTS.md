@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository contains **Сільпо / зріз**, a local browser prototype for
+This repository contains **Silpo / Pulse**, a local browser prototype for
 personal Silpo purchase analytics. Every user authenticates directly with Silpo
 MCP via OAuth. The repository and filesystem must never contain a user's
 receipts, purchase history, account data, access tokens, refresh tokens, or
@@ -19,8 +19,11 @@ manually.
 - src/styles.css contains the responsive design system.
 - src/server.mjs owns the local HTTP server, cookies, and in-memory sessions.
 - src/lib/silpo-mcp.js contains the Silpo MCP client and OAuth provider.
+- src/lib/session-store.js selects local memory or encrypted Redis sessions.
 - src/lib/normalize-orders.js allowlists MCP fields for the browser.
 - src/lib/analytics.js contains pure aggregation helpers.
+- api/index.mjs exposes the Node.js Vercel Function.
+- vercel.json defines static output and function rewrites.
 - tests/ contains Node test-runner coverage with synthetic fixtures only.
 
 Keep the repository root limited to configuration and high-level documentation.
@@ -32,7 +35,7 @@ responses.
 - npm run dev — serve at http://127.0.0.1:4173 with OAuth callback.
 - npm test — run all Node test-runner tests.
 - npm run lint — syntax-check every JavaScript module.
-- npm run build — create the local runtime in dist/.
+- npm run build — create the Vercel static frontend output in dist/.
 
 Set PORT to override the development port. Document new canonical commands in
 both package.json and README.md.
@@ -40,7 +43,10 @@ both package.json and README.md.
 ## Privacy & Silpo MCP Rules
 
 - Fetch purchases at runtime only after the current user completes OAuth.
-- Keep tokens, OAuth registration data, and MCP responses in memory only.
+- Keep OAuth registration data and MCP responses in memory only during local
+  development.
+- On Vercel, persist only AES-256-GCM encrypted OAuth session state in Redis
+  with an eight-hour TTL; never persist normalized or raw purchase history.
 - Use random HttpOnly cookies with SameSite=Lax; validate OAuth state.
 - Never log authorization URLs, tokens, raw MCP responses, home addresses,
   account identifiers, or receipt URLs.
@@ -61,6 +67,10 @@ kebab-case CSS classes. Derive visuals from :root tokens and preserve keyboard
 focus, meaningful alternative text, responsive behavior, and
 prefers-reduced-motion support.
 
+Write every Markdown file and every source-code or configuration comment in
+English. This rule applies to existing and new content. User-facing interface
+copy may remain Ukrainian when required by the product design.
+
 ## Testing Guidelines
 
 Add tests for analytics, normalization, privacy boundaries, OAuth state handling,
@@ -73,3 +83,7 @@ Use concise imperative commit subjects such as Add per-user Silpo OAuth flow.
 Keep commits narrowly scoped. Pull requests should explain privacy impact, list
 validation performed, and include screenshots for visual changes. Never commit
 credentials or personal customer data.
+
+Never create a commit or push changes without the user's separate, explicit
+approval for that exact action. Preparing and validating changes does not imply
+commit or push authorization.

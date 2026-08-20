@@ -6,68 +6,78 @@ import { normalizeOfflineOrders, normalizeOnlineOrders, withinPeriod } from "./n
 
 const MCP_URL = new URL(process.env.SILPO_MCP_URL || "https://mcp.silpo.ua/mcp");
 const CLIENT_NAME = "silpo-purchase-pulse";
-const CLIENT_VERSION = "0.2.0";
+const CLIENT_VERSION = "0.3.0";
 
 export function createUserSession() {
   return {
     createdAt: Date.now(),
     lastSeenAt: Date.now(),
     state: crypto.randomUUID(),
-    tokens: undefined,
-    clientInformation: new Map(),
-    codeVerifier: undefined,
-    discoveryState: undefined,
-    authorizationUrl: undefined,
-    pendingClient: undefined,
-    pendingTransport: undefined,
-    client: undefined,
-    transport: undefined
+    tokens: null,
+    clientInformation: {},
+    codeVerifier: null,
+    discoveryState: null,
+    authorizationUrl: null
   };
 }
 
 export async function startAuthorization(session, redirectUrl) {
   session.state = crypto.randomUUID();
-  session.authorizationUrl = undefined;
+  session.authorizationUrl = null;
   const connection = makeConnection(session, redirectUrl);
-  session.pendingClient = connection.client;
-  session.pendingTransport = connection.transport;
 
   try {
     await connection.client.connect(connection.transport);
-    session.client = connection.client;
-    session.transport = connection.transport;
-    session.pendingClient = undefined;
-    session.pendingTransport = undefined;
     return { authenticated: true };
   } catch (error) {
     if (session.authorizationUrl) {
       return { authenticated: false, authorizationUrl: session.authorizationUrl };
     }
-    await closeConnection(connection);
     throw new Error("Silpo MCP не розпочав авторизацію.", { cause: error });
+  } finally {
+    await closeConnection(connection);
   }
 }
 
 export async function finishAuthorization(session, callbackParams, redirectUrl) {
-  if (!session.pendingTransport || !session.pendingClient) {
-    throw new Error("Сесію авторизації не знайдено. Почніть вхід ще раз.");
-  }
   if (!callbackParams.get("state") || callbackParams.get("state") !== session.state) {
     throw new Error("OAuth state не збігається.");
   }
+  if (!session.codeVerifier || !Object.keys(session.clientInformation).length) {
+    throw new Error("Сесію авторизації не знайдено. Почніть вхід ще раз.");
+  }
 
-  await session.pendingTransport.finishAuth(callbackParams);
-  await closeConnection({ client: session.pendingClient, transport: session.pendingTransport });
-  session.pendingClient = undefined;
-  session.pendingTransport = undefined;
-  session.authorizationUrl = undefined;
-  await connectSession(session, redirectUrl);
+  const connection = makeConnection(session, redirectUrl);
+  try {
+    await connection.transport.finishAuth(callbackParams);
+  } finally {
+    await closeConnection(connection);
+    session.authorizationUrl = null;
+    session.codeVerifier = null;
+  }
 }
 
 export async function fetchPurchaseAnalytics(session, redirectUrl) {
   if (!session.tokens) return null;
-  if (!session.client) await connectSession(session, redirectUrl);
+  const connection = makeConnection(session, redirectUrl);
 
+  try {
+    await connection.client.connect(connection.transport);
+    return await collectPurchaseAnalytics(connection.client);
+  } finally {
+    await closeConnection(connection);
+  }
+}
+
+export function closeUserSession(session) {
+  session.tokens = null;
+  session.codeVerifier = null;
+  session.discoveryState = null;
+  session.authorizationUrl = null;
+  session.clientInformation = {};
+}
+
+async function collectPurchaseAnalytics(client) {
   const now = new Date();
   const periodEnd = now.toISOString();
   const periodStartDate = new Date(now);
@@ -78,13 +88,13 @@ export async function fetchPurchaseAnalytics(session, redirectUrl) {
   let onlineOrders = [];
 
   try {
-    offlineOrders = await fetchOfflineOrders(session.client, periodStart, periodEnd);
+    offlineOrders = await fetchOfflineOrders(client, periodStart, periodEnd);
   } catch {
     warnings.push("Не вдалося завантажити покупки з фізичних магазинів.");
   }
 
   try {
-    onlineOrders = await fetchOnlineOrders(session.client, periodStart);
+    onlineOrders = await fetchOnlineOrders(client, periodStart);
   } catch {
     warnings.push("Не вдалося завантажити онлайн-замовлення.");
   }
@@ -103,22 +113,6 @@ export async function fetchPurchaseAnalytics(session, redirectUrl) {
   };
 }
 
-export async function closeUserSession(session) {
-  await closeConnection({ client: session.client, transport: session.transport });
-  await closeConnection({ client: session.pendingClient, transport: session.pendingTransport });
-  session.tokens = undefined;
-  session.codeVerifier = undefined;
-  session.clientInformation.clear();
-}
-
-async function connectSession(session, redirectUrl) {
-  await closeConnection({ client: session.client, transport: session.transport });
-  const connection = makeConnection(session, redirectUrl);
-  await connection.client.connect(connection.transport);
-  session.client = connection.client;
-  session.transport = connection.transport;
-}
-
 function makeConnection(session, redirectUrl) {
   const provider = createOAuthProvider(session, redirectUrl);
   const client = new Client(
@@ -130,6 +124,8 @@ function makeConnection(session, redirectUrl) {
 }
 
 function createOAuthProvider(session, redirectUrl) {
+  const redirectHost = new URL(redirectUrl).hostname;
+  const localRedirect = redirectHost === "localhost" || redirectHost === "127.0.0.1";
   return {
     redirectUrl,
     clientMetadata: {
@@ -138,14 +134,14 @@ function createOAuthProvider(session, redirectUrl) {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
-      application_type: "native"
+      application_type: localRedirect ? "native" : "web"
     },
     state: () => session.state,
-    clientInformation: ({ issuer } = {}) => session.clientInformation.get(issuer || MCP_URL.origin),
+    clientInformation: ({ issuer } = {}) => session.clientInformation[issuer || MCP_URL.origin],
     saveClientInformation: (information, { issuer } = {}) => {
-      session.clientInformation.set(issuer || MCP_URL.origin, information);
+      session.clientInformation[issuer || MCP_URL.origin] = information;
     },
-    tokens: () => session.tokens,
+    tokens: () => session.tokens || undefined,
     saveTokens: (tokens) => {
       session.tokens = tokens;
     },
@@ -162,12 +158,12 @@ function createOAuthProvider(session, redirectUrl) {
     saveDiscoveryState: (state) => {
       session.discoveryState = state;
     },
-    discoveryState: () => session.discoveryState,
+    discoveryState: () => session.discoveryState || undefined,
     invalidateCredentials: (scope) => {
-      if (scope === "all" || scope === "tokens") session.tokens = undefined;
-      if (scope === "all" || scope === "client") session.clientInformation.clear();
-      if (scope === "all" || scope === "verifier") session.codeVerifier = undefined;
-      if (scope === "all" || scope === "discovery") session.discoveryState = undefined;
+      if (scope === "all" || scope === "tokens") session.tokens = null;
+      if (scope === "all" || scope === "client") session.clientInformation = {};
+      if (scope === "all" || scope === "verifier") session.codeVerifier = null;
+      if (scope === "all" || scope === "discovery") session.discoveryState = null;
     }
   };
 }
@@ -232,7 +228,6 @@ async function callTool(client, name, args) {
 async function closeConnection({ client, transport }) {
   if (client) {
     try { await client.close(); } catch {}
-    return;
   }
   if (transport) {
     try { await transport.close(); } catch {}
