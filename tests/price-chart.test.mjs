@@ -27,7 +27,7 @@ test("renders a single price observation without a curve", () => {
   assert.doesNotMatch(chart, / C /);
 });
 
-test("keeps every purchase point while limiting price labels to twelve", () => {
+test("keeps every purchase point while limiting paired price and date labels to twelve", () => {
   const chart = renderPriceHistoryChart([
     { createdAt: "2026-01-01T12:00:00Z", price: 10 },
     { createdAt: "2026-01-02T12:00:00Z", price: 20 },
@@ -41,8 +41,31 @@ test("keeps every purchase point while limiting price labels to twelve", () => {
 
   assert.equal((chart.match(/data-price-point/g) || []).length, 8);
   assert.ok((chart.match(/data-price-value-label/g) || []).length <= 12);
-  assert.ok((chart.match(/data-price-date/g) || []).length <= 12);
+  assert.equal(
+    (chart.match(/data-price-date/g) || []).length,
+    (chart.match(/data-price-value-label/g) || []).length
+  );
   assert.doesNotMatch(chart, /overflow-x: auto/);
+});
+
+test("renders a purchase date below every displayed price label", () => {
+  const history = Array.from({ length: 12 }, (_, index) => ({
+    createdAt: `2026-01-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+    price: 10 + index * 5
+  }));
+  const chart = renderPriceHistoryChart(history);
+
+  assert.equal((chart.match(/data-price-value-label/g) || []).length, 12);
+  assert.equal((chart.match(/data-price-date/g) || []).length, 12);
+  const priceLabelIndexes = [...chart.matchAll(/data-price-label-point-index="(\d+)"/g)].map((match) => match[1]);
+  const dateLabelIndexes = [...chart.matchAll(/data-chart-point-index="(\d+)"/g)].map((match) => match[1]);
+  const priceLabelXs = [...chart.matchAll(/<g class="price-chart-value-label"[^>]*>[\s\S]*?<text x="([^"]+)"/g)].map((match) => match[1]);
+  const dateLabelXs = [...chart.matchAll(/<g class="price-chart-date-tick"[^>]*>[\s\S]*?<text x="([^"]+)"/g)].map((match) => match[1]);
+
+  assert.deepEqual(dateLabelIndexes, priceLabelIndexes);
+  assert.deepEqual(dateLabelXs, priceLabelXs);
+  assert.equal((chart.match(/price-chart-date-tick[\s\S]*?text-anchor="start"/g) || []).length, 12);
+  assert.match(chart, /transform="rotate\(48 [^ ]+ 320\)"/);
 });
 
 test("removes the smallest price change before reducing a chart beyond twelve points", () => {

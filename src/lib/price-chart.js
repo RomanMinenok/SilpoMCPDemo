@@ -51,7 +51,7 @@ function renderChartSvg(observations, { width, dimensions, labelFontSize, isMobi
   const path = createMonotonePath(points);
   const priceUnit = priceAxisUnit(observations);
   const priceLabels = selectPriceLabels(points, dimensions, labelFontSize);
-  const dateLabelIndexes = selectDateLabelIndexes(points.length, priceLabels.map((label) => label.index));
+  const dateLabelY = dimensions.top + plotHeight + 22;
 
   return `
         <svg class="price-history-chart" viewBox="0 0 ${width} ${dimensions.height}" width="100%" height="${dimensions.height}" role="img" aria-labelledby="price-chart-title price-chart-description">
@@ -77,19 +77,19 @@ function renderChartSvg(observations, { width, dimensions, labelFontSize, isMobi
           </g>
           <g class="price-chart-value-labels">
             ${priceLabels.map((label) => `
-              <g class="price-chart-value-label" data-price-value-label data-price-label-kind="${label.kind}">
+              <g class="price-chart-value-label" data-price-value-label data-price-label-kind="${label.kind}" data-price-label-point-index="${label.index}">
                 <line x1="${label.point.x}" x2="${label.point.x}" y1="${label.lineStartY}" y2="${label.lineEndY}"></line>
                 <rect x="${label.left}" y="${label.top}" width="${label.width}" height="${label.height}"></rect>
                 <text x="${label.point.x}" y="${label.baseline}" text-anchor="middle">${escapeHtml(label.text)}</text>
               </g>`).join("")}
           </g>
           <line class="price-chart-axis" x1="${dimensions.left}" x2="${width - dimensions.right}" y1="${dimensions.top + plotHeight}" y2="${dimensions.top + plotHeight}"></line>
-          ${dateLabelIndexes.map((index) => {
-            const point = points[index];
+          ${priceLabels.map((label) => {
+            const point = label.point;
             return `
-            <g class="price-chart-date-tick" data-price-date>
+            <g class="price-chart-date-tick" data-price-date data-chart-point-index="${label.index}">
               <line x1="${point.x}" x2="${point.x}" y1="${dimensions.top + plotHeight}" y2="${dimensions.top + plotHeight + 7}"></line>
-              <text x="${point.x}" y="${dimensions.top + plotHeight + 22}" transform="rotate(48 ${point.x} ${dimensions.top + plotHeight + 22})" text-anchor="start">${escapeHtml(formatChartDate(point.createdAt))}</text>
+              <text x="${point.x}" y="${dateLabelY}" transform="rotate(48 ${point.x} ${dateLabelY})" text-anchor="start">${escapeHtml(formatChartDate(point.createdAt))}</text>
             </g>`;
           }).join("")}
           <text class="price-chart-axis-title price-chart-x-axis-title" x="${dimensions.left + plotWidth / 2}" y="${dimensions.height - 12}" text-anchor="middle">ДАТА ПОКУПКИ</text>
@@ -245,15 +245,6 @@ function createPriceLabels(points, dimensions, fontSize) {
       lineEndY: placeAbove ? top + height : top - 4
     };
   });
-}
-
-function selectDateLabelIndexes(length, requiredIndexes) {
-  const indexes = new Set([0, length - 1, ...requiredIndexes]);
-  const limit = 6;
-  for (let step = 1; indexes.size < limit && step < limit; step += 1) {
-    indexes.add(Math.round(step * (length - 1) / limit));
-  }
-  return [...indexes].sort((a, b) => a - b).slice(0, limit);
 }
 
 function findPriceIndex(points, value) {
