@@ -284,7 +284,7 @@ function renderReceipt(id, scrollToTop = true) {
   document.querySelector("[data-receipt-commentary]")?.addEventListener("click", requestReceiptCommentary);
 }
 
-function renderProduct(id) {
+function renderProduct(id, scrollToTop = true) {
   const product = products.find((item) => String(item.id) === String(id));
   if (!product) return renderNotFound();
   const rank = topProducts.findIndex((item) => item.id === product.id) + 1;
@@ -320,7 +320,7 @@ function renderProduct(id) {
     </section>
     ${renderPriceHistoryChart(history)}
     <aside class="insight-strip"><span>${icons.cart}</span><p><small>Невелике спостереження</small><strong>${insightFor(product, rank)}</strong></p></aside>
-  `, true);
+  `, true, scrollToTop);
 }
 
 function renderEmpty() {
@@ -625,6 +625,14 @@ function route() {
 }
 
 window.addEventListener("hashchange", route);
+let chartResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    const productMatch = location.hash.match(/^#\/product\/(.+)$/);
+    if (snapshot && productMatch) renderProduct(decodeURIComponent(productMatch[1]), false);
+  }, 150);
+});
 const authError = new URLSearchParams(location.search).get("auth_error");
 if (authError) {
   history.replaceState({}, "", "/#/");
