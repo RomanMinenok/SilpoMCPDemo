@@ -62,7 +62,7 @@ export async function handleRequest(request, response) {
     if (requestUrl.pathname === "/api/auth/callback" && request.method === "GET") {
       await finishAuthorization(session, requestUrl.searchParams, `${origin}/api/auth/callback`);
       await saveSession(session);
-      response.writeHead(302, { Location: "/#/", "Cache-Control": "no-store" });
+      response.writeHead(302, { Location: "/", "Cache-Control": "no-store" });
       return response.end();
     }
     if (requestUrl.pathname === "/api/analytics" && request.method === "GET") {
@@ -106,7 +106,7 @@ export async function handleRequest(request, response) {
       ? error.message
       : error instanceof Error ? error.message : "Невідома помилка";
     if (request.url?.startsWith("/api/auth/callback")) {
-      response.writeHead(302, { Location: "/?auth_error=1#/", "Cache-Control": "no-store" });
+      response.writeHead(302, { Location: "/?auth_error=1", "Cache-Control": "no-store" });
       return response.end();
     }
     return json(response, 500, { error: "SERVER_ERROR", message });

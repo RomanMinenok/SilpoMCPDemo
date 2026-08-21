@@ -43,18 +43,18 @@ function formatMoney(value) {
 }
 
 function renderShell(content, detail = false, scrollToTop = true) {
-  const activePage = location.hash.startsWith("#/recent-purchases") || location.hash.startsWith("#/receipt/")
+  const activePage = location.pathname === "/" || location.pathname.startsWith("/receipt/")
     ? "recent-purchases"
     : "top-products";
   app.innerHTML = `
     <header class="site-header">
-      <a class="wordmark" href="#/" aria-label="До Топ-10 товарів">
+      <a class="wordmark" href="/" aria-label="До останніх покупок">
         <span class="wordmark-dot"></span><span>сільпо</span><em>/ зріз</em>
       </a>
       ${snapshot ? `
         <nav class="site-nav" aria-label="Основна навігація">
-          <a href="#/"${activePage === "top-products" ? " aria-current=\"page\"" : ""}>Топ-10</a>
-          <a href="#/recent-purchases"${activePage === "recent-purchases" ? " aria-current=\"page\"" : ""}>Останні покупки</a>
+          <a href="/"${activePage === "recent-purchases" ? " aria-current=\"page\"" : ""}>Останні покупки</a>
+          <a href="/top-products"${activePage === "top-products" ? " aria-current=\"page\"" : ""}>Топ-10</a>
         </nav>
       ` : ""}
       <div class="header-actions">
@@ -122,7 +122,7 @@ function renderDashboard(scrollToTop = true) {
   resetCommentaryFor(topProducts);
   const maxPurchases = topProducts[0]?.purchaseCount || 1;
   const productRows = topProducts.map((product, index) => `
-    <a class="rank-row reveal" style="--delay:${index * 45}ms" href="#/product/${encodeURIComponent(product.id)}">
+    <a class="rank-row reveal" style="--delay:${index * 45}ms" href="/product/${encodeURIComponent(product.id)}">
       <span class="rank-number">${String(index + 1).padStart(2, "0")}</span>
       <span class="thumb-wrap">${renderProductImage(product.image, "", " loading=\"lazy\"")}</span>
       <span class="rank-copy"><strong>${escapeHtml(product.name)}</strong><small>${product.purchaseCount} ${receiptWord(product.purchaseCount)} · ${formatQuantity(product)}</small></span>
@@ -183,7 +183,7 @@ function renderRecentPurchases(scrollToTop = true) {
   const purchaseRows = recentPurchases.map((purchase, index) => {
     const itemCount = visibleItemCount(purchase);
     return `
-      <a class="receipt-row reveal" style="--delay:${index * 45}ms" href="#/receipt/${encodeURIComponent(purchase.id)}">
+      <a class="receipt-row reveal" style="--delay:${index * 45}ms" href="/receipt/${encodeURIComponent(purchase.id)}">
         <span class="receipt-row-number">${String(recentPurchasesOffset + index + 1).padStart(2, "0")}</span>
         ${renderReceiptProductCollage(purchase)}
         <span class="receipt-row-copy"><strong>${escapeHtml(purchase.magicName)}</strong><small>${escapeHtml(purchase.prediction || purchase.store)}</small></span>
@@ -253,7 +253,7 @@ function renderReceipt(id, scrollToTop = true) {
   const itemsTotal = items.reduce((total, item) => total + item.quantity * item.price, 0);
 
   renderShell(`
-    <nav class="back-nav reveal"><a href="#/recent-purchases">${icons.back}<span>Останні покупки</span></a><span>Чек поточної сесії</span></nav>
+    <nav class="back-nav reveal"><a href="/">${icons.back}<span>Останні покупки</span></a><span>Чек поточної сесії</span></nav>
     <section class="receipt-detail-hero">
       <div class="receipt-detail-summary reveal">
         <p class="eyebrow">${shortDate(receipt.createdAt)}</p>
@@ -292,7 +292,7 @@ function renderProduct(id, scrollToTop = true) {
   const priceMin = Math.min(...history.map((item) => item.price));
   const priceMax = Math.max(...history.map((item) => item.price));
   renderShell(`
-    <nav class="back-nav reveal"><a href="#/">${icons.back}<span>Усі покупки</span></a><span>Товар № ${escapeHtml(product.id)}</span></nav>
+    <nav class="back-nav reveal"><a href="/top-products">${icons.back}<span>Усі покупки</span></a><span>Товар № ${escapeHtml(product.id)}</span></nav>
     <section class="product-hero">
       <div class="product-photo reveal"><span class="rank-sticker">#${rank || "—"}<small>у вашому топі</small></span>${renderProductImage(product.image, product.name, "", '<span class="image-placeholder">◌</span>')}</div>
       <div class="product-copy reveal" style="--delay:80ms">
@@ -334,7 +334,7 @@ function renderEmpty() {
 }
 
 function renderNotFound() {
-  renderShell(`<section class="not-found"><span>404</span><h1>Цей товар загубився між полицями</h1><a class="primary-button" href="#/">Повернутися до покупок ${icons.arrow}</a></section>`, true);
+  renderShell(`<section class="not-found"><span>404</span><h1>Цей товар загубився між полицями</h1><a class="primary-button" href="/">Повернутися до покупок ${icons.arrow}</a></section>`, true);
 }
 
 async function login() {
@@ -507,7 +507,7 @@ async function loadRecentPurchasesPage(offset, { scrollToTop = false } = {}) {
     recentPurchasesState = "error";
   }
 
-  if (location.hash === "#/recent-purchases") renderRecentPurchases(false);
+  if (location.pathname === "/") renderRecentPurchases(false);
 }
 
 function resetReceiptCommentaryFor(receipt) {
@@ -612,30 +612,55 @@ function safeImageUrl(value) {
 
 function route() {
   if (!snapshot) return;
-  const match = location.hash.match(/^#\/product\/(.+)$/);
-  const receiptMatch = location.hash.match(/^#\/receipt\/(.+)$/);
+  const match = location.pathname.match(/^\/product\/(.+)$/);
+  const receiptMatch = location.pathname.match(/^\/receipt\/(.+)$/);
   if (match) renderProduct(decodeURIComponent(match[1]));
   else if (receiptMatch) renderReceipt(decodeURIComponent(receiptMatch[1]));
-  else if (location.hash === "#/recent-purchases") {
+  else if (location.pathname === "/") {
     if (recentPurchasesState === "idle") void loadRecentPurchasesPage(0, { scrollToTop: true });
     else renderRecentPurchases();
   }
-  else if (!location.hash || location.hash === "#/" || location.hash === "#") renderDashboard();
+  else if (location.pathname === "/top-products") renderDashboard();
   else renderNotFound();
 }
 
-window.addEventListener("hashchange", route);
+function replaceLegacyHashRoute() {
+  const legacyRoute = location.hash;
+  const route = legacyRoute === "#/" || legacyRoute === "#/recent-purchases"
+    ? "/"
+    : legacyRoute === "#/top-products"
+      ? "/top-products"
+      : legacyRoute.startsWith("#/product/")
+        ? legacyRoute.slice(1)
+        : legacyRoute.startsWith("#/receipt/")
+          ? legacyRoute.slice(1)
+          : null;
+  if (route) history.replaceState({}, "", route);
+}
+
+window.addEventListener("popstate", route);
+document.addEventListener("click", (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target.closest("a[href]");
+  if (!link || link.target || link.hasAttribute("download")) return;
+  const url = new URL(link.href, location.href);
+  if (url.origin !== location.origin || url.hash) return;
+  event.preventDefault();
+  history.pushState({}, "", `${url.pathname}${url.search}`);
+  route();
+});
 let chartResizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(chartResizeTimer);
   chartResizeTimer = setTimeout(() => {
-    const productMatch = location.hash.match(/^#\/product\/(.+)$/);
+    const productMatch = location.pathname.match(/^\/product\/(.+)$/);
     if (snapshot && productMatch) renderProduct(decodeURIComponent(productMatch[1]), false);
   }, 150);
 });
+replaceLegacyHashRoute();
 const authError = new URLSearchParams(location.search).get("auth_error");
 if (authError) {
-  history.replaceState({}, "", "/#/");
+  history.replaceState({}, "", "/");
   renderLogin("Авторизацію не завершено. Спробуйте увійти ще раз.");
 } else {
   loadData();
