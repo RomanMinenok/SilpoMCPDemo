@@ -1,4 +1,5 @@
 import { aggregateProducts, filterOrdersByDays, filterOrdersByMonths, formatQuantity, summarizeOrders } from "./lib/analytics.js";
+import { renderPriceHistoryChart } from "./lib/price-chart.js";
 
 const app = document.querySelector("#app");
 const money = new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -317,6 +318,7 @@ function renderProduct(id) {
           <span class="receipt-private">Поточна сесія</span>
         </article>`).join("")}</div>
     </section>
+    ${renderPriceHistoryChart(history)}
     <aside class="insight-strip"><span>${icons.cart}</span><p><small>Невелике спостереження</small><strong>${insightFor(product, rank)}</strong></p></aside>
   `, true);
 }
