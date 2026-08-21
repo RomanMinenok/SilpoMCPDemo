@@ -11,6 +11,7 @@ test("renders each purchase as a dated point on a smooth price chart", () => {
 
   assert.equal((chart.match(/data-price-point/g) || []).length, 3);
   assert.equal((chart.match(/data-price-date/g) || []).length, 3);
+  assert.equal((chart.match(/data-price-value-label/g) || []).length, 3);
   assert.match(chart, /02\.01\.2026/);
   assert.match(chart, /14\.02\.2026/);
   assert.match(chart, /10\.03\.2026/);
@@ -24,6 +25,24 @@ test("renders a single price observation without a curve", () => {
   assert.equal((chart.match(/data-price-point/g) || []).length, 1);
   assert.equal((chart.match(/data-price-date/g) || []).length, 1);
   assert.doesNotMatch(chart, / C /);
+});
+
+test("labels trend reversals while keeping price labels limited", () => {
+  const chart = renderPriceHistoryChart([
+    { createdAt: "2026-01-01T12:00:00Z", price: 10 },
+    { createdAt: "2026-01-02T12:00:00Z", price: 20 },
+    { createdAt: "2026-01-03T12:00:00Z", price: 15 },
+    { createdAt: "2026-01-04T12:00:00Z", price: 25 },
+    { createdAt: "2026-01-05T12:00:00Z", price: 19 },
+    { createdAt: "2026-01-06T12:00:00Z", price: 30 },
+    { createdAt: "2026-01-07T12:00:00Z", price: 22 },
+    { createdAt: "2026-01-08T12:00:00Z", price: 35 }
+  ]);
+
+  assert.match(chart, /data-price-label-kind="turn"/);
+  assert.ok((chart.match(/data-price-value-label/g) || []).length <= 6);
+  assert.ok((chart.match(/data-price-date/g) || []).length <= 6);
+  assert.doesNotMatch(chart, /overflow-x: auto/);
 });
 
 test("labels the price axis with the purchase unit", () => {
