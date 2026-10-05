@@ -12,9 +12,11 @@ import {
   startAuthorization
 } from "./lib/silpo-mcp.js";
 import {
+  consumeAuthStartAllowance,
   deleteSession,
   loadSession,
   saveSession,
+  SESSION_ID_BYTES,
   sessionStoreMode
 } from "./lib/session-store.js";
 import {
@@ -44,40 +46,54 @@ export async function handleRequest(request, response) {
       return serveStatic(requestUrl.pathname, response);
     }
 
-    const session = await getSession(request, response, origin);
-    session.lastSeenAt = Date.now();
+    if (!isSupportedApiRequest(requestUrl.pathname, request.method)) {
+      return json(response, 404, { error: "NOT_FOUND" });
+    }
+
+    let session = await loadRequestSession(request);
+    if (session) session.lastSeenAt = Date.now();
 
     if (requestUrl.pathname === "/api/session" && request.method === "GET") {
-      await saveSession(session);
       return json(response, 200, {
-        authenticated: Boolean(session.tokens),
+        authenticated: Boolean(session?.tokens),
         sessionStore: sessionStoreMode()
       });
     }
     if (requestUrl.pathname === "/api/auth/start" && request.method === "POST") {
+      const allowance = await consumeAuthStartAllowance(clientIdentifier(request));
+      if (!allowance.allowed) {
+        response.setHeader("Retry-After", allowance.retryAfterSeconds);
+        return json(response, 429, { error: "RATE_LIMITED" });
+      }
+      const created = !session;
+      if (created) session = createSession();
       const result = await startAuthorization(session, `${origin}/api/auth/callback`);
       await saveSession(session);
+      if (created) response.setHeader("Set-Cookie", sessionCookie(session.id, origin));
       return json(response, 200, result);
     }
     if (requestUrl.pathname === "/api/auth/callback" && request.method === "GET") {
+      if (!session) throw new Error("Сесію авторизації не знайдено. Почніть вхід ще раз.");
       await finishAuthorization(session, requestUrl.searchParams, `${origin}/api/auth/callback`);
       await saveSession(session);
       response.writeHead(302, { Location: "/", "Cache-Control": "no-store" });
       return response.end();
     }
     if (requestUrl.pathname === "/api/analytics" && request.method === "GET") {
+      if (!session?.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const data = await fetchPurchaseAnalytics(session, `${origin}/api/auth/callback`);
       await saveSession(session);
-      return data ? json(response, 200, data) : json(response, 401, { error: "AUTH_REQUIRED" });
+      return json(response, 200, data);
     }
     if (requestUrl.pathname === "/api/recent-purchases" && request.method === "GET") {
+      if (!session?.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const offset = boundedInteger(requestUrl.searchParams.get("offset"), 0, 490, 0);
       const data = await fetchRecentPurchasePage(session, `${origin}/api/auth/callback`, { offset, limit: 10 });
       await saveSession(session);
-      return data ? json(response, 200, data) : json(response, 401, { error: "AUTH_REQUIRED" });
+      return json(response, 200, data);
     }
     if (requestUrl.pathname === "/api/top-products-commentary" && request.method === "POST") {
-      if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
+      if (!session?.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const body = await readJson(request);
       const products = sanitizeTopProducts(body?.products);
       if (!products.length) return json(response, 400, { error: "INVALID_PRODUCTS", message: "Немає товарів для коментаря." });
@@ -86,7 +102,7 @@ export async function handleRequest(request, response) {
       return json(response, 200, { commentary });
     }
     if (requestUrl.pathname === "/api/receipt-commentary" && request.method === "POST") {
-      if (!session.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
+      if (!session?.tokens) return json(response, 401, { error: "AUTH_REQUIRED" });
       const body = await readJson(request);
       const items = sanitizeReceiptItems(body?.items);
       if (!items.length) return json(response, 400, { error: "INVALID_ITEMS", message: "Немає товарів для коментаря." });
@@ -95,8 +111,10 @@ export async function handleRequest(request, response) {
       return json(response, 200, { commentary });
     }
     if (requestUrl.pathname === "/api/auth/logout" && request.method === "POST") {
-      closeUserSession(session);
-      await deleteSession(session.id);
+      if (session) {
+        closeUserSession(session);
+        await deleteSession(session.id);
+      }
       clearCookie(response, origin);
       return json(response, 200, { success: true });
     }
@@ -132,15 +150,35 @@ async function readRequestBody(request) {
   return body;
 }
 
-async function getSession(request, response, origin) {
+async function loadRequestSession(request) {
   const cookies = parseCookies(request.headers.cookie);
-  const existing = await loadSession(cookies.silpo_session);
-  if (existing) return existing;
+  return loadSession(cookies.silpo_session);
+}
 
+function createSession() {
   const session = createUserSession();
-  session.id = randomBytes(24).toString("base64url");
-  response.setHeader("Set-Cookie", sessionCookie(session.id, origin));
+  session.id = randomBytes(SESSION_ID_BYTES).toString("base64url");
   return session;
+}
+
+function isSupportedApiRequest(pathname, method) {
+  return (pathname === "/api/session" && method === "GET")
+    || (pathname === "/api/auth/start" && method === "POST")
+    || (pathname === "/api/auth/callback" && method === "GET")
+    || (pathname === "/api/analytics" && method === "GET")
+    || (pathname === "/api/recent-purchases" && method === "GET")
+    || (pathname === "/api/top-products-commentary" && method === "POST")
+    || (pathname === "/api/receipt-commentary" && method === "POST")
+    || (pathname === "/api/auth/logout" && method === "POST");
+}
+
+function clientIdentifier(request) {
+  const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  if (process.env.VERCEL === "1" && forwarded) return forwarded;
+  return request.socket?.remoteAddress
+    || request.connection?.remoteAddress
+    || forwarded
+    || String(request.headers["x-real-ip"] || "unknown");
 }
 
 function safeOrigin(request) {
